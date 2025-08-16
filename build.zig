@@ -1,23 +1,35 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const exe_mod = b.addModule("zig-zag-tui", .{
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const exe_mod = b.addModule("zig-zag-mui", .{
         .root_source_file = b.path("src/main.zig"),
-        .target = b.graph.host,
+        .target = target,
+        .optimize = optimize,
     });
 
     const exe = b.addExecutable(.{
-        .name = "zig-zag-tui",
+        .name = "zig-zag-mui",
         .root_source_file = b.path("src/main.zig"),
-        .target = b.graph.host,
+        .target = target,
+        .optimize = optimize,
     });
     b.installArtifact(exe);
 
     // Check on save for LSP help.
     const exe_check = b.addExecutable(.{
-        .name = "zig-zag-tui",
+        .name = "zig-zag-mui",
         .root_module = exe_mod,
     });
-    const check = b.step("check", "Check if zig-zag-tui compiles");
+    const check = b.step("check", "Check if zig-zag-mui compiles");
     check.dependOn(&exe_check.step);
+
+    const exe_run = b.addRunArtifact(exe);
+    if (b.args) |args| {
+        exe_run.addArgs(args);
+    }
+    const run = b.step("run", "Run zig-zag-mui");
+    run.dependOn(&exe_run.step);
 }
