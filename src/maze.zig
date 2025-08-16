@@ -3,6 +3,7 @@
 //! functions such that the builder and solver can perform their tasks more
 //! easily.
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 /// A Square is the fundamental maze cell type. It has 32 bits available
 /// for various building and solving logic that other modules can apply.
@@ -43,12 +44,43 @@ pub const Delta = struct {
 pub const Tape = struct {
     deltas: std.ArrayList(Delta),
     i: usize,
+
+    fn init(allocator: Allocator) Tape {
+        return Tape{
+            .deltas = std.ArrayList(Delta).init(allocator),
+            .i = 0,
+        };
+    }
+
+    fn deinit(self: *Tape) void {
+        self.deltas.deinit();
+    }
 };
 
 pub const Maze = struct {
     maze: Blueprint,
     build_history: Tape,
     solve_history: Tape,
+
+    pub fn init(allocator: Allocator, rows: isize, cols: isize) !Maze {
+        return Maze{
+            .maze = Blueprint{
+                .rows = (rows + 1) - @mod(rows, 2),
+                .cols = (cols + 1) - @mod(cols, 2),
+                .squares = try allocator.alloc(Square, @intCast(rows * cols)),
+            },
+            .build_history = Tape.init(allocator),
+            .solve_history = Tape.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Maze, allocator: Allocator) void {
+        allocator.free(self.maze.squares);
+        self.maze.rows = 0;
+        self.maze.cols = 0;
+        self.build_history.deinit();
+        self.solve_history.deinit();
+    }
 };
 
 /// The bit signifying a wall to the north of the current square exists.
@@ -118,6 +150,6 @@ pub const cardinal_directions = [4]Point{
 /// Returns the Unicode box drawing character representing the current wall
 /// piece as a string. Provide the square as is with no shifts or modifications.
 /// Assumes the square is a wall.
-pub fn wall_piece(square: Square) []const u8 {
+pub fn wallPiece(square: Square) []const u8 {
     return walls[((square & wall_mask) >> wall_shift)];
 }
