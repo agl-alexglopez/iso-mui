@@ -31,11 +31,18 @@ pub const Blueprint = struct {
     cols: isize,
 };
 
+/// The Point is a simple helper to navigate squares in the maze. The fields
+/// are signed because this allows for cleaner iterator patterns that check
+/// all surrounding squares as offsets from the current Square.
 pub const Point = struct {
     r: isize,
     c: isize,
 };
 
+/// A Delta provides a before and after snapshot of a Square. If placed in
+/// a Tape it becomes possible to replay the changes forward and back. A
+/// burst can be used if many changes should occur across squares
+/// simultaneously.
 pub const Delta = struct {
     p: Point,
     before: Square,
@@ -43,10 +50,16 @@ pub const Delta = struct {
     burst: usize,
 };
 
+/// A Tape is used to record the history of a maze building or solving algorithm
+/// over the course of the program. We can record Deltas as snapshots of our
+/// changes. By recording these simple Deltas we can play the maze algorithms
+/// forward or in reverse in whatever format we please. The algorithms can also
+/// be stepped through for better understanding after we record the history.
 pub const Tape = struct {
     deltas: std.ArrayList(Delta),
     i: usize,
 
+    /// A Tape uses a dynamic storage method for Deltas so needs an allocator.
     fn init(allocator: Allocator) Tape {
         return Tape{
             .deltas = std.ArrayList(Delta).init(allocator),
@@ -54,17 +67,27 @@ pub const Tape = struct {
         };
     }
 
+    /// Free the storage of Delta snapshots.
     fn deinit(self: *Tape) void {
         self.deltas.deinit();
         self.i = 0;
     }
 };
 
+/// A Maze contains the core array of maze Squares and Tapes for the builders
+/// and solvers. The builders and solvers may record their actions on the maze
+/// as Deltas that occur over time on maze Squares. How the builders, solvers,
+/// and display code interprets these Deltas over the maze Squares is not a
+/// concern of this type. It simply provides the types needed.
 pub const Maze = struct {
+    /// The core maze array with row and columns specification.
     maze: Blueprint,
     build_history: Tape,
     solve_history: Tape,
 
+    /// Initialize the maze with an allocator and desired rows and columns. Rows
+    /// and columns may be incremented for display purposes. The maze Square
+    /// array and Tape types require allocation.
     pub fn init(allocator: Allocator, rows: isize, cols: isize) !Maze {
         return Maze{
             .maze = Blueprint{
@@ -77,6 +100,7 @@ pub const Maze = struct {
         };
     }
 
+    /// Destroy the maze and Tapes stored with it.
     pub fn deinit(self: *Maze, allocator: Allocator) void {
         allocator.free(self.maze.squares);
         self.maze.rows = 0;
@@ -85,11 +109,13 @@ pub const Maze = struct {
         self.solve_history.deinit();
     }
 
+    /// Return a copy of the Square at the desired row and column.
     pub fn get(self: Maze, row: isize, col: isize) Square {
         assert(row > 0 and col > 0);
         return self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 
+    /// Return a pointer to the Square at the desired row and column.
     pub fn getPtr(self: Maze, row: isize, col: isize) *Square {
         assert(row > 0 and col > 0);
         return &self.maze.squares[@intCast((row * self.maze.cols) + col)];
@@ -167,7 +193,7 @@ pub fn wallPiece(square: Square) []const u8 {
     return walls[((square & wall_mask) >> wall_shift)];
 }
 
-test "maze square getters" {
+test "maze square flat 2D buffer multiplication getters" {
     var buf: [128]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buf);
     const allocator = fba.allocator();
