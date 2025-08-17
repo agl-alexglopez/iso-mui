@@ -171,7 +171,7 @@ test "maze square getters" {
     var buf: [512]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buf);
     const allocator = fba.allocator();
-    var maze: Maze = try Maze.init(allocator, 10, 10);
+    var maze: Maze = try Maze.init(allocator, 5, 5);
     defer {
         maze.deinit(allocator);
     }
