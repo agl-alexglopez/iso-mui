@@ -168,7 +168,7 @@ pub fn wallPiece(square: Square) []const u8 {
 }
 
 test "maze square getters" {
-    var buf: [512]u8 = undefined;
+    var buf: [128]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buf);
     const allocator = fba.allocator();
     var maze: Maze = try Maze.init(allocator, 5, 5);
