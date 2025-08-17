@@ -4,6 +4,8 @@
 //! easily.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const assert = std.debug.assert;
+const expect = std.testing.expect;
 
 /// A Square is the fundamental maze cell type. It has 32 bits available
 /// for various building and solving logic that other modules can apply.
@@ -54,6 +56,7 @@ pub const Tape = struct {
 
     fn deinit(self: *Tape) void {
         self.deltas.deinit();
+        self.i = 0;
     }
 };
 
@@ -80,6 +83,16 @@ pub const Maze = struct {
         self.maze.cols = 0;
         self.build_history.deinit();
         self.solve_history.deinit();
+    }
+
+    pub fn get(self: Maze, row: isize, col: isize) Square {
+        assert(row > 0 and col > 0);
+        return self.maze.squares[@intCast((row * self.maze.cols) + col)];
+    }
+
+    pub fn getPtr(self: Maze, row: isize, col: isize) *Square {
+        assert(row > 0 and col > 0);
+        return &self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 };
 
@@ -152,4 +165,18 @@ pub const cardinal_directions = [4]Point{
 /// Assumes the square is a wall.
 pub fn wallPiece(square: Square) []const u8 {
     return walls[((square & wall_mask) >> wall_shift)];
+}
+
+test "maze square getters" {
+    var buf: [512]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    const allocator = fba.allocator();
+    var maze: Maze = try Maze.init(allocator, 10, 10);
+    defer {
+        maze.deinit(allocator);
+    }
+    maze.getPtr(3, 3).* = 0;
+    try expect(maze.get(3, 3) == 0);
+    maze.getPtr(3, 3).* = east_wall | west_wall;
+    try expect(maze.get(3, 3) == east_wall | west_wall);
 }
