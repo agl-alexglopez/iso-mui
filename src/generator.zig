@@ -233,3 +233,11 @@ pub fn recordPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
     try carveWall(m, wall, backtracking);
     try carveWall(m, next, backtracking);
 }
+
+pub fn getSquare(s: maze.Square) []const u8 {
+    if ((s & maze.path_bit) == 0) {
+        return maze.wallPiece(s);
+    } else {
+        return " ";
+    }
+}
