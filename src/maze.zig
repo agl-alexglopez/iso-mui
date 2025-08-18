@@ -133,7 +133,7 @@ pub const Tape = struct {
     /// Free the storage of Delta snapshots.
     fn deinit(self: *Tape) void {
         self.deltas.deinit();
-        self.i = 0;
+        self.* = undefined;
     }
 
     /// Records the requested delta to the back of the tape. This may allocate and can fail.
@@ -183,10 +183,9 @@ pub const Maze = struct {
     /// Destroy the maze and Tapes stored with it.
     pub fn deinit(self: *Maze, allocator: Allocator) void {
         allocator.free(self.maze.squares);
-        self.maze.rows = 0;
-        self.maze.cols = 0;
         self.build_history.deinit();
         self.solve_history.deinit();
+        self.* = undefined;
     }
 
     /// Return a copy of the Square at the desired row and column. Assumes the row and column access
