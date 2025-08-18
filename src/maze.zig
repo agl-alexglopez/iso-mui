@@ -143,14 +143,14 @@ pub const Tape = struct {
 
     /// Record a burst of deltas that correspond to a series of changes in squares that should
     /// occur at the same time. This function allocates and may fail.
-    pub fn recordBurst(self: *Tape, deltas: []Delta) !void {
-        if (self.deltas.items.len and
-            ((deltas[0].burst != self.deltas.items.len) ||
-                (deltas[deltas.len - 1].burst != deltas.len)))
+    pub fn recordBurst(self: *Tape, d: []const Delta) !void {
+        if (self.deltas.items.len != 0 and
+            ((d[0].burst != d.len) or
+                (d[d.len - 1].burst != d.len)))
         {
             return error.IllFormedDeltaBurst;
         }
-        try self.deltas.appendSlice(deltas);
+        try self.deltas.appendSlice(d);
     }
 };
 
@@ -167,11 +167,13 @@ pub const Maze = struct {
     /// Initialize the maze with an allocator and desired rows and columns. Rows and columns may be
     /// incremented for display purposes. The maze Square  array and Tape types require allocation.
     pub fn init(allocator: Allocator, rows: isize, cols: isize) !Maze {
+        const set_rows = (rows + 1) - @mod(rows, 2);
+        const set_cols = (cols + 1) - @mod(cols, 2);
         return Maze{
             .maze = Blueprint{
-                .rows = (rows + 1) - @mod(rows, 2),
-                .cols = (cols + 1) - @mod(cols, 2),
-                .squares = try allocator.alloc(Square, @intCast(rows * cols)),
+                .rows = set_rows,
+                .cols = set_cols,
+                .squares = try allocator.alloc(Square, @intCast(set_rows * set_cols)),
             },
             .build_history = Tape.init(allocator),
             .solve_history = Tape.init(allocator),
@@ -189,29 +191,29 @@ pub const Maze = struct {
 
     /// Return a copy of the Square at the desired row and column. Assumes the row and column access
     /// is within maze bounds.
-    pub fn get(self: Maze, row: isize, col: isize) Square {
-        assert(row > 0 and col > 0 and row < self.maze.rows and col < self.maze.cols);
+    pub fn get(self: *const Maze, row: isize, col: isize) Square {
+        assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 
     /// Return a pointer to the Square at the desired row and column. Assumes the row and column
     /// access is within maze bounds.
-    pub fn getPtr(self: Maze, row: isize, col: isize) *Square {
-        assert(row > 0 and col > 0 and row < self.maze.rows and col < self.maze.cols);
+    pub fn getPtr(self: *const Maze, row: isize, col: isize) *Square {
+        assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return &self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 
     /// Returns true if the path bit is off at the specified coordinates, making the square a wall.
     /// Assumes the row and column access is within maze bounds.
-    pub fn isWall(self: Maze, row: isize, col: isize) bool {
-        assert(row > 0 and col > 0 and row < self.maze.rows and col < self.maze.cols);
+    pub fn isWall(self: *const Maze, row: isize, col: isize) bool {
+        assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) == 0;
     }
 
     /// Returns true if the path bit is off at the specified coordinates, making the square a path.
     /// Assumes the row and column access is within maze bounds.
-    pub fn isPath(self: Maze, row: isize, col: isize) bool {
-        assert(row > 0 and col > 0 and row < self.maze.rows and col < self.maze.cols);
+    pub fn isPath(self: *const Maze, row: isize, col: isize) bool {
+        assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) != 0;
     }
 };
