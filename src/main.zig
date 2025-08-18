@@ -16,7 +16,7 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var maze_args = Args{};
     const allocator = arena.allocator();
-    for (std.os.argv) |arg| {
+    for (std.os.argv[1..]) |arg| {
         const argstr = std.mem.span(arg);
         if (std.mem.startsWith(u8, argstr, row_flag)) {
             const str_rows = argstr[row_flag.len..];
@@ -24,6 +24,8 @@ pub fn main() !void {
         } else if (std.mem.startsWith(u8, argstr, col_flag)) {
             const str_cols = argstr[row_flag.len..];
             maze_args.cols = try std.fmt.parseInt(isize, str_cols, 10);
+        } else {
+            return error.UnrecognizedCommandLineArgument;
         }
     }
     var new_maze: maze.Maze = try maze.Maze.init(allocator, maze_args.rows, maze_args.cols);
