@@ -143,14 +143,14 @@ pub const Tape = struct {
 
     /// Record a burst of deltas that correspond to a series of changes in squares that should
     /// occur at the same time. This function allocates and may fail.
-    pub fn recordBurst(self: *Tape, d: []const Delta) !void {
+    pub fn recordBurst(self: *Tape, burst: []const Delta) !void {
         if (self.deltas.items.len != 0 and
-            ((d[0].burst != d.len) or
-                (d[d.len - 1].burst != d.len)))
+            ((burst[0].burst != burst.len) or
+                (burst[burst.len - 1].burst != burst.len)))
         {
             return error.IllFormedDeltaBurst;
         }
-        try self.deltas.appendSlice(d);
+        try self.deltas.appendSlice(burst);
     }
 };
 
