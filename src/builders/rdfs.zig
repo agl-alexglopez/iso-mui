@@ -14,7 +14,9 @@ const maze = @import("../maze.zig");
 
 /// Generates a randomized depth first search maze. This maze will produce long windy passages.
 /// Because the building of the maze is recorded in the maze build history, allocation may fail.
-pub fn generate(m: *maze.Maze) !*maze.Maze {
+pub fn generate(
+    m: *maze.Maze,
+) !*maze.Maze {
     try gen.fillMazeWithWalls(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();

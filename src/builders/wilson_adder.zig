@@ -32,15 +32,24 @@ const RandomWalk = struct {
 };
 
 /// Generates a perfect maze using Wilson's algorithm. This is a wall adding algorithm that connects
-/// wall pieces by loop erased random walks.
-pub fn generate(m: *maze.Maze) !*maze.Maze {
+/// wall pieces by loop erased random walks. This means the algorithm could take longer if the
+/// randomness determines. However, in practice this is a very fast algorithm because we start by
+/// connecting walls and there is a perimeter of complete walls around the maze.
+pub fn generate(
+    m: *maze.Maze,
+) !*maze.Maze {
     try gen.buildWallPerimeter(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
     var cur: RandomWalk = .{
         .prev_row_start = 2,
         .prev = .{ .r = 0, .c = 0 },
-        .walk = try gen.randPoint(rand, 2, m.maze.rows - 2, 2, m.maze.cols - 2, gen.ParityPoint.even),
+        .walk = try gen.randPoint(
+            rand,
+            .{ 2, m.maze.rows - 2 },
+            .{ 2, m.maze.cols - 2 },
+            gen.ParityPoint.even,
+        ),
         .next = .{ .r = 0, .c = 0 },
     };
     var indices: [4]usize = .{ 0, 1, 2, 3 };
@@ -72,7 +81,10 @@ pub fn generate(m: *maze.Maze) !*maze.Maze {
 /// In the case of finding more maze to connect to the algorithm may finish after this section is
 /// built because the maze is complete. In this case null is returned. Otherwise the next RandomWalk
 /// state is returned via pointer to the same argument provided.
-fn nextStep(m: *maze.Maze, walk: *RandomWalk) !bool {
+fn nextStep(
+    m: *maze.Maze,
+    walk: *RandomWalk,
+) !bool {
     if (gen.isBuilt(m, walk.next)) {
         try closeGap(m, walk.walk, walk.next);
         try connectWalk(m, walk.walk);
@@ -106,7 +118,10 @@ fn nextStep(m: *maze.Maze, walk: *RandomWalk) !bool {
 
 /// Erases a loop if encountered during a random walk. The loop is erased all the way back to the
 /// point of intersection between the next step and the current walk head.
-fn eraseLoop(m: *maze.Maze, walk: Loop) !void {
+fn eraseLoop(
+    m: *maze.Maze,
+    walk: Loop,
+) !void {
     var cur = walk;
     while (!std.meta.eql(cur.walk, cur.root)) {
         // Obtain the square and backtracking directions before square cleanup occurs.
@@ -147,7 +162,10 @@ fn eraseLoop(m: *maze.Maze, walk: Loop) !void {
 
 /// Connects a valid random walk that has found another built section of the maze to connect with.
 /// No loop has formed and therefore the randomized walk is valid and connectable.
-fn connectWalk(m: *maze.Maze, walk: maze.Point) !void {
+fn connectWalk(
+    m: *maze.Maze,
+    walk: maze.Point,
+) !void {
     var cur = walk;
     while ((m.get(cur.r, cur.c) & gen.backtrack_mask) != 0) {
         const dir = backtrackPoint(m, cur);
@@ -166,7 +184,11 @@ fn connectWalk(m: *maze.Maze, walk: maze.Point) !void {
 /// Marks the wall with the appropriate backtracking marks while building. This should be used when
 /// a valid step has been found to progress the random walk. Neither a loop or another part of the
 /// built maze has been found so we continue building, leaving backtracking marks for ourselves.
-fn markWall(m: *maze.Maze, walk: maze.Point, next: maze.Point) !void {
+fn markWall(
+    m: *maze.Maze,
+    walk: maze.Point,
+    next: maze.Point,
+) !void {
     var wall = walk;
     const next_before = m.get(next.r, next.c);
     var wall_before: maze.Square = undefined;
@@ -211,7 +233,10 @@ fn markWall(m: *maze.Maze, walk: maze.Point, next: maze.Point) !void {
 /// connecting the wall section to another built section of the maze. All backtracking marks will
 /// be erased and all that will remain is the wall bits indicating the shape the piece takes. All
 /// surrounding walls must be updated to indicate a new location of a wall as well.
-fn buildWalkLine(m: *maze.Maze, p: maze.Point) !void {
+fn buildWalkLine(
+    m: *maze.Maze,
+    p: maze.Point,
+) !void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
     var wall: maze.Square = 0b0;
@@ -291,7 +316,11 @@ fn buildWalkLine(m: *maze.Maze, p: maze.Point) !void {
 }
 
 /// Closes the gap between cur and next by building a wall line.
-fn closeGap(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
+fn closeGap(
+    m: *maze.Maze,
+    cur: maze.Point,
+    next: maze.Point,
+) !void {
     var wall = cur;
     if (next.r < cur.r) {
         wall.r -= 1;
@@ -308,7 +337,11 @@ fn closeGap(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
 }
 
 /// Returns true if the next step we want to take in the random walk is not a loop and is valid.
-fn isValidStep(m: *const maze.Maze, next: maze.Point, prev: maze.Point) bool {
+fn isValidStep(
+    m: *const maze.Maze,
+    next: maze.Point,
+    prev: maze.Point,
+) bool {
     return (next.r >= 0) and
         (next.r < m.maze.rows) and
         (next.c >= 0) and
@@ -317,18 +350,27 @@ fn isValidStep(m: *const maze.Maze, next: maze.Point, prev: maze.Point) bool {
 }
 
 /// Return a reference to the appropriate backtrack offset point from the given square.
-fn backtrackPoint(m: *const maze.Maze, walk: maze.Point) *const maze.Point {
+fn backtrackPoint(
+    m: *const maze.Maze,
+    walk: maze.Point,
+) *const maze.Point {
     const i = (m.get(walk.r, walk.c) & gen.backtrack_mask);
     return &gen.backtracking_points[i];
 }
 
 /// Return a reference to the appropriate backtrack half step offset point from the given square.
-fn backtrackHalfPoint(m: *const maze.Maze, walk: maze.Point) *const maze.Point {
+fn backtrackHalfPoint(
+    m: *const maze.Maze,
+    walk: maze.Point,
+) *const maze.Point {
     const i = (m.get(walk.r, walk.c) & gen.backtrack_mask);
     return &gen.backtracking_half_points[i];
 }
 
 /// Returns true if the current square has been encountered earlier during the random walk.
-fn foundLoop(m: *const maze.Maze, p: maze.Point) bool {
+fn foundLoop(
+    m: *const maze.Maze,
+    p: maze.Point,
+) bool {
     return (m.get(p.r, p.c) & walk_bit) != 0;
 }

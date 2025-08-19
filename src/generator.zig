@@ -65,26 +65,47 @@ pub const ParityPoint = enum(usize) {
 
 /// Returns a random point within the inclusive ranges `[row_start, ro_inclusive_end]` and
 /// `[col_start, col_inclusive_end]`. The point will also be even or odd according to parity arg.
-pub fn randPoint(rand: std.Random, row_start: isize, row_inclusive_end: isize, col_start: isize, col_inclusive_end: isize, parity: ParityPoint) !maze.Point {
-    if ((row_start >= row_inclusive_end) or (col_start >= col_inclusive_end)) {
+pub fn randPoint(
+    /// [in] The random generator that is already initialized.
+    rand: std.Random,
+    /// [in] The inclusive range [start, end] for valid row values.
+    row_range: struct { isize, isize },
+    /// [in] The inclusive range [start, end] for valid column values.
+    col_range: struct { isize, isize },
+    /// [in] The desired parity of the random result, even or odd.
+    parity: ParityPoint,
+) !maze.Point {
+    if ((row_range[0] >= row_range[1]) or (col_range[0] >= col_range[1])) {
         return error.InvalidRange;
     }
     return .{
-        .r = 2 * (@divTrunc(rand.intRangeAtMost(isize, row_start, row_inclusive_end), 2)) +
+        .r = 2 * (@divTrunc(rand.intRangeAtMost(isize, row_range[0], row_range[1]), 2)) +
             @as(isize, @intCast(@intFromEnum(parity) % 2)),
-        .c = 2 * (@divTrunc(rand.intRangeAtMost(isize, col_start, col_inclusive_end), 2)) +
+        .c = 2 * (@divTrunc(rand.intRangeAtMost(isize, col_range[0], col_range[1]), 2)) +
             @as(isize, @intCast(@intFromEnum(parity) % 2)),
     };
 }
 
 /// Returns true if the maze is already been processed by a building algorithm.
-pub fn isBuilt(m: *const maze.Maze, p: maze.Point) bool {
+pub fn isBuilt(
+    /// [in] The read only pointer to the maze.
+    m: *const maze.Maze,
+    /// [in] The point in the maze to check. Checked in debug.
+    p: maze.Point,
+) bool {
     return (m.get(p.r, p.c) & builder_bit) != 0;
 }
 
 /// Chooses an un-built point from the current starting row and returns it. The point may be odd
 /// or even as specified by the parity. The parity much match that of the starting row.
-pub fn choosePointFromRow(m: *const maze.Maze, start_row: isize, parity: ParityPoint) !?maze.Point {
+pub fn choosePointFromRow(
+    /// [in] The read only pointer to the maze.
+    m: *const maze.Maze,
+    /// [in] The starting row position.
+    start_row: isize,
+    /// [in] The desired parity for steps, must match parity of starting input as a safety check.
+    parity: ParityPoint,
+) !?maze.Point {
     std.debug.assert(start_row >= 0);
     if (@mod(start_row, 2) != (@intFromEnum(parity) % 2)) {
         return error.StartRowAndParityDoNotMatch;
@@ -103,7 +124,12 @@ pub fn choosePointFromRow(m: *const maze.Maze, start_row: isize, parity: ParityP
 
 /// Returns true if the maze allows a square to be built on point next. It must be within the maze
 /// perimeter and not already built by the algorithm in prior exploration.
-pub fn canBuildNewSquare(m: *const maze.Maze, next: maze.Point) bool {
+pub fn canBuildNewSquare(
+    /// [in] The read only pointer to the maze.
+    m: *const maze.Maze,
+    /// [in] The next point we wish to build at.
+    next: maze.Point,
+) bool {
     return next.r > 0 and
         next.r < m.maze.rows - 1 and
         next.c > 0 and
@@ -113,7 +139,9 @@ pub fn canBuildNewSquare(m: *const maze.Maze, next: maze.Point) bool {
 
 /// Prepares the maze for a path carving algorithm. All squares will become walls. Because the
 /// history of this action must be recorded in the maze Tape, allocation may fail.
-pub fn fillMazeWithWalls(m: *maze.Maze) !void {
+pub fn fillMazeWithWalls(
+    m: *maze.Maze,
+) !void {
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
             try buildWall(m, .{ .r = @intCast(r), .c = @intCast(c) });
@@ -125,7 +153,9 @@ pub fn fillMazeWithWalls(m: *maze.Maze) !void {
 }
 
 /// Builds a perimeter wall around the outside of the maze. All Squares within are paths.
-pub fn buildWallPerimeter(m: *maze.Maze) !void {
+pub fn buildWallPerimeter(
+    m: *maze.Maze,
+) !void {
     var burst: usize = 0;
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
@@ -144,7 +174,10 @@ pub fn buildWallPerimeter(m: *maze.Maze) !void {
 /// Builds a wall at Point p. The Point must check its surrounding squares in cardinal directions
 /// to decide what shape it should take and how to connect to others. The history is recorded in
 /// the Tape and so allocation may fail.
-pub fn buildWall(m: *maze.Maze, p: maze.Point) !void {
+pub fn buildWall(
+    m: *maze.Maze,
+    p: maze.Point,
+) !void {
     var wall: maze.Square = 0b0;
     if (p.r > 0) {
         wall |= maze.north_wall;
@@ -167,7 +200,10 @@ pub fn buildWall(m: *maze.Maze, p: maze.Point) !void {
     m.getPtr(p.r, p.c).* = wall;
 }
 
-pub fn buildPerimeterPiece(m: *maze.Maze, p: maze.Point) !usize {
+pub fn buildPerimeterPiece(
+    m: *maze.Maze,
+    p: maze.Point,
+) !usize {
     var deltas: [5]maze.Delta = undefined;
     var burst: usize = 1;
     var wall: maze.Square = 0b0;
@@ -247,7 +283,10 @@ pub fn buildPerimeterPiece(m: *maze.Maze, p: maze.Point) !usize {
 /// Builds a path at point p, recording the history. To build a path, the current square must be
 /// changed and surrounding squares must be notified a neighboring wall no longer exists. Allocation
 /// may fail while recording the history.
-pub fn buildPath(m: *maze.Maze, p: maze.Point) !usize {
+pub fn buildPath(
+    m: *maze.Maze,
+    p: maze.Point,
+) !usize {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
     var square = m.get(p.r, p.c);
@@ -310,7 +349,11 @@ pub fn buildPath(m: *maze.Maze, p: maze.Point) !usize {
 /// Carves the wall Square to become a path for backtracking. The current square records what
 /// direction it came from and also updates surrounding walls of a new path Square. History is
 /// recorded so allocation may fail.
-pub fn carveBacktrackSquare(m: *maze.Maze, p: maze.Point, backtrack: maze.Square) !void {
+pub fn carveBacktrackSquare(
+    m: *maze.Maze,
+    p: maze.Point,
+    backtrack: maze.Square,
+) !void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
     const before = m.get(p.r, p.c);
@@ -385,7 +428,11 @@ pub fn carveBacktrackSquare(m: *maze.Maze, p: maze.Point, backtrack: maze.Square
 /// path by building from cur to next but leave backtracking marks leading from next to cur. Because
 /// we record this history allocation may fail. Assumes cur and next are not equal and returns
 /// an error if this is not the case.
-pub fn recordBacktrackPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
+pub fn recordBacktrackPath(
+    m: *maze.Maze,
+    cur: maze.Point,
+    next: maze.Point,
+) !void {
     try carveBacktrackSquare(m, cur, m.get(cur.r, cur.c) & backtrack_mask);
     var wall = cur;
     var backtracking: maze.Square = 0;
@@ -409,7 +456,9 @@ pub fn recordBacktrackPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !vo
 }
 
 /// Gets a string representation of a maze square. Right now only path or wall for debug print.
-pub fn getSquare(s: maze.Square) []const u8 {
+pub fn getSquare(
+    s: maze.Square,
+) []const u8 {
     if ((s & maze.path_bit) == 0) {
         return maze.wallPiece(s);
     } else {

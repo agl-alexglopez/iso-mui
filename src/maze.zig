@@ -95,7 +95,11 @@ pub const Blueprint = struct {
     rows: isize,
     cols: isize,
 
-    pub fn init(allocator: Allocator, r: isize, c: isize) !Blueprint {
+    pub fn init(
+        allocator: Allocator,
+        r: isize,
+        c: isize,
+    ) !Blueprint {
         const ret = Blueprint{
             .squares = try allocator.alloc(Square, @intCast(r * c)),
             .rows = r,
@@ -135,7 +139,9 @@ pub const Tape = struct {
     i: usize,
 
     /// A Tape uses a dynamic storage method for Deltas so needs an allocator.
-    fn init(allocator: Allocator) Tape {
+    fn init(
+        allocator: Allocator,
+    ) Tape {
         return Tape{
             .deltas = std.ArrayList(Delta).init(allocator),
             .i = 0,
@@ -143,19 +149,27 @@ pub const Tape = struct {
     }
 
     /// Free the storage of Delta snapshots.
-    fn deinit(self: *Tape) void {
+    fn deinit(
+        self: *Tape,
+    ) void {
         self.deltas.deinit();
         self.* = undefined;
     }
 
     /// Records the requested delta to the back of the tape. This may allocate and can fail.
-    pub fn record(self: *Tape, delta: Delta) !void {
+    pub fn record(
+        self: *Tape,
+        delta: Delta,
+    ) !void {
         try self.deltas.append(delta);
     }
 
     /// Record a burst of deltas that correspond to a series of changes in squares that should
     /// occur at the same time. This function allocates and may fail.
-    pub fn recordBurst(self: *Tape, burst: []const Delta) !void {
+    pub fn recordBurst(
+        self: *Tape,
+        burst: []const Delta,
+    ) !void {
         if (self.deltas.items.len != 0 and
             ((burst[0].burst != burst.len) or
                 (burst[burst.len - 1].burst != burst.len)))
@@ -178,7 +192,11 @@ pub const Maze = struct {
 
     /// Initialize the maze with an allocator and desired rows and columns. Rows and columns may be
     /// incremented for display purposes. The maze Square  array and Tape types require allocation.
-    pub fn init(allocator: Allocator, rows: isize, cols: isize) !Maze {
+    pub fn init(
+        allocator: Allocator,
+        rows: isize,
+        cols: isize,
+    ) !Maze {
         const set_rows = (rows + 1) - @mod(rows, 2);
         const set_cols = (cols + 1) - @mod(cols, 2);
         return Maze{
@@ -189,7 +207,10 @@ pub const Maze = struct {
     }
 
     /// Destroy the maze and Tapes stored with it.
-    pub fn deinit(self: *Maze, allocator: Allocator) void {
+    pub fn deinit(
+        self: *Maze,
+        allocator: Allocator,
+    ) void {
         allocator.free(self.maze.squares);
         self.build_history.deinit();
         self.solve_history.deinit();
@@ -198,28 +219,44 @@ pub const Maze = struct {
 
     /// Return a copy of the Square at the desired row and column. Assumes the row and column access
     /// is within maze bounds.
-    pub fn get(self: *const Maze, row: isize, col: isize) Square {
+    pub fn get(
+        self: *const Maze,
+        row: isize,
+        col: isize,
+    ) Square {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 
     /// Return a pointer to the Square at the desired row and column. Assumes the row and column
     /// access is within maze bounds.
-    pub fn getPtr(self: *const Maze, row: isize, col: isize) *Square {
+    pub fn getPtr(
+        self: *const Maze,
+        row: isize,
+        col: isize,
+    ) *Square {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return &self.maze.squares[@intCast((row * self.maze.cols) + col)];
     }
 
     /// Returns true if the path bit is off at the specified coordinates, making the square a wall.
     /// Assumes the row and column access is within maze bounds.
-    pub fn isWall(self: *const Maze, row: isize, col: isize) bool {
+    pub fn isWall(
+        self: *const Maze,
+        row: isize,
+        col: isize,
+    ) bool {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) == 0;
     }
 
     /// Returns true if the path bit is off at the specified coordinates, making the square a path.
     /// Assumes the row and column access is within maze bounds.
-    pub fn isPath(self: *const Maze, row: isize, col: isize) bool {
+    pub fn isPath(
+        self: *const Maze,
+        row: isize,
+        col: isize,
+    ) bool {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) != 0;
     }
@@ -229,7 +266,9 @@ pub const Maze = struct {
 
 /// Returns the Unicode box drawing character representing the current wall piece as a string.
 /// Provide the square as is with no shifts or modifications. Assumes the square is a wall.
-pub fn wallPiece(square: Square) []const u8 {
+pub fn wallPiece(
+    square: Square,
+) []const u8 {
     return walls[((square & wall_mask) >> wall_shift)];
 }
 
