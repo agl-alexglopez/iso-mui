@@ -16,13 +16,13 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var maze_args = Args{};
     const allocator = arena.allocator();
-    for (std.os.argv[1..]) |arg| {
-        const argstr = std.mem.span(arg);
-        if (std.mem.startsWith(u8, argstr, row_flag)) {
-            const str_rows = argstr[row_flag.len..];
+    for (std.os.argv[1..]) |a| {
+        const arg = std.mem.span(a);
+        if (std.mem.startsWith(u8, arg, row_flag)) {
+            const str_rows = arg[row_flag.len..];
             maze_args.rows = try std.fmt.parseInt(isize, str_rows, 10);
-        } else if (std.mem.startsWith(u8, argstr, col_flag)) {
-            const str_cols = argstr[row_flag.len..];
+        } else if (std.mem.startsWith(u8, arg, col_flag)) {
+            const str_cols = arg[row_flag.len..];
             maze_args.cols = try std.fmt.parseInt(isize, str_cols, 10);
         } else {
             return error.UnrecognizedCommandLineArgument;
