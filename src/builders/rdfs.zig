@@ -18,10 +18,7 @@ pub fn generate(m: *maze.Maze) !*maze.Maze {
     try gen.fillMazeWithWalls(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
-    const start = maze.Point{
-        .r = 2 * (@divTrunc(rand.intRangeAtMost(isize, 0, m.maze.rows - 3), 2)) + 1,
-        .c = 2 * (@divTrunc(rand.intRangeAtMost(isize, 0, m.maze.cols - 3), 2)) + 1,
-    };
+    const start = try gen.randPoint(rand, 0, m.maze.rows - 3, 0, m.maze.cols - 3, gen.ParityPoint.odd);
     var cur = start;
     var random_direction_indices: [gen.num_directions]usize = .{ 0, 1, 2, 3 };
     branching: while (true) {

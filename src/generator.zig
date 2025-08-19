@@ -13,6 +13,8 @@
 //! too specific to any builder. For example, while it might be easy to assume that recursive
 //! backtracking maze builders are the only type that uses backtracking, actually Wilson's algorithm
 //! for generating mazes makes great use of backtracking during its random walks.
+const std = @import("std");
+
 const maze = @import("maze.zig");
 
 /// Any builders that choose to cache seen squares in place can use this bit.
@@ -33,9 +35,9 @@ pub const from_west: maze.Square = 0b0100;
 /// While generating mazes we operate in steps of two so offsets are in steps of 2
 pub const generator_cardinals: [4]maze.Point = .{
     .{ .r = -2, .c = 0 }, // North
-    .{ .r = 0, .c = 2 }, // West
+    .{ .r = 0, .c = 2 }, // East
     .{ .r = 2, .c = 0 }, // South
-    .{ .r = 0, .c = -2 }, // East
+    .{ .r = 0, .c = -2 }, // West
 };
 
 /// Building works in steps of two so we need to backtrack by this amount.
@@ -56,6 +58,49 @@ pub const backtracking_half_points: [5]maze.Point = .{
     .{ .r = 0, .c = -1 },
 };
 
+pub const ParityPoint = enum(usize) {
+    odd = 1,
+    even = 2,
+};
+
+/// Returns a random point within the inclusive ranges `[row_start, ro_inclusive_end]` and
+/// `[col_start, col_inclusive_end]`. The point will also be even or odd according to parity arg.
+pub fn randPoint(rand: std.Random, row_start: isize, row_inclusive_end: isize, col_start: isize, col_inclusive_end: isize, parity: ParityPoint) !maze.Point {
+    if ((row_start >= row_inclusive_end) or (col_start >= col_inclusive_end)) {
+        return error.InvalidRange;
+    }
+    return .{
+        .r = 2 * (@divTrunc(rand.intRangeAtMost(isize, row_start, row_inclusive_end), 2)) +
+            @as(isize, @intCast(@intFromEnum(parity) % 2)),
+        .c = 2 * (@divTrunc(rand.intRangeAtMost(isize, col_start, col_inclusive_end), 2)) +
+            @as(isize, @intCast(@intFromEnum(parity) % 2)),
+    };
+}
+
+/// Returns true if the maze is already been processed by a building algorithm.
+pub fn isBuilt(m: *const maze.Maze, p: maze.Point) bool {
+    return (m.get(p.r, p.c) & builder_bit) != 0;
+}
+
+/// Chooses an un-built point from the current starting row and returns it. The point may be odd
+/// or even as specified by the parity. The parity much match that of the starting row.
+pub fn choosePointFromRow(m: *const maze.Maze, start_row: isize, parity: ParityPoint) !?maze.Point {
+    std.debug.assert(start_row >= 0);
+    if (@mod(start_row, 2) != (@intFromEnum(parity) % 2)) {
+        return error.StartRowAndParityDoNotMatch;
+    }
+    var r: isize = @intCast(start_row);
+    while (r < m.maze.rows - 1) : (r += 2) {
+        var c: isize = @intCast(@intFromEnum(parity));
+        while (c < m.maze.cols - 1) : (c += 2) {
+            if (!isBuilt(m, .{ .r = r, .c = c })) {
+                return .{ .r = r, .c = c };
+            }
+        }
+    }
+    return null;
+}
+
 /// Returns true if the maze allows a square to be built on point next. It must be within the maze
 /// perimeter and not already built by the algorithm in prior exploration.
 pub fn canBuildNewSquare(m: *const maze.Maze, next: maze.Point) bool {
@@ -74,6 +119,26 @@ pub fn fillMazeWithWalls(m: *maze.Maze) !void {
             try buildWall(m, .{ .r = @intCast(r), .c = @intCast(c) });
         }
     }
+    const burst: usize = @intCast(m.maze.rows * m.maze.cols);
+    m.build_history.deltas.items[0].burst = burst;
+    m.build_history.deltas.items[burst - 1].burst = burst;
+}
+
+/// Builds a perimeter wall around the outside of the maze. All Squares within are paths.
+pub fn buildWallPerimeter(m: *maze.Maze) !void {
+    var burst: usize = 0;
+    for (0..@intCast(m.maze.rows)) |r| {
+        for (0..@intCast(m.maze.cols)) |c| {
+            if ((c == 0) or (c == m.maze.cols - 1) or (r == 0) or (r == m.maze.rows - 1)) {
+                m.getPtr(@intCast(r), @intCast(c)).* |= builder_bit;
+                burst += try buildPerimeterPiece(m, .{ .r = @intCast(r), .c = @intCast(c) });
+            } else {
+                burst += try buildPath(m, .{ .r = @intCast(r), .c = @intCast(c) });
+            }
+        }
+    }
+    m.build_history.deltas.items[0].burst = burst;
+    m.build_history.deltas.items[burst - 1].burst = burst;
 }
 
 /// Builds a wall at Point p. The Point must check its surrounding squares in cardinal directions
@@ -102,13 +167,90 @@ pub fn buildWall(m: *maze.Maze, p: maze.Point) !void {
     m.getPtr(p.r, p.c).* = wall;
 }
 
+pub fn buildPerimeterPiece(m: *maze.Maze, p: maze.Point) !usize {
+    var deltas: [5]maze.Delta = undefined;
+    var burst: usize = 1;
+    var wall: maze.Square = 0b0;
+    if (p.r > 0 and m.isWall(p.r - 1, p.c)) {
+        const square = m.get(p.r - 1, p.c);
+        deltas[burst] = .{
+            .p = .{
+                .r = p.r - 1,
+                .c = p.c,
+            },
+            .before = square,
+            .after = square | maze.south_wall,
+            .burst = 1,
+        };
+        burst += 1;
+        wall |= maze.north_wall;
+        m.getPtr(p.r - 1, p.c).* |= maze.south_wall;
+    }
+    if (p.r + 1 < m.maze.rows and m.isWall(p.r + 1, p.c)) {
+        const square = m.get(p.r + 1, p.c);
+        deltas[burst] = .{
+            .p = .{
+                .r = p.r + 1,
+                .c = p.c,
+            },
+            .before = square,
+            .after = square | maze.north_wall,
+            .burst = 1,
+        };
+        burst += 1;
+        wall |= maze.south_wall;
+        m.getPtr(p.r + 1, p.c).* |= maze.north_wall;
+    }
+    if (p.c > 0 and m.isWall(p.r, p.c - 1)) {
+        const square = m.get(p.r, p.c - 1);
+        deltas[burst] = .{
+            .p = .{
+                .r = p.r,
+                .c = p.c - 1,
+            },
+            .before = square,
+            .after = square | maze.east_wall,
+            .burst = 1,
+        };
+        burst += 1;
+        wall |= maze.west_wall;
+        m.getPtr(p.r, p.c - 1).* |= maze.east_wall;
+    }
+    if (p.c + 1 < m.maze.cols and m.isWall(p.r, p.c + 1)) {
+        const square = m.get(p.r, p.c + 1);
+        deltas[burst] = .{
+            .p = .{
+                .r = p.r,
+                .c = p.c + 1,
+            },
+            .before = square,
+            .after = square | maze.west_wall,
+            .burst = 1,
+        };
+        burst += 1;
+        wall |= maze.east_wall;
+        m.getPtr(p.r, p.c + 1).* |= maze.west_wall;
+    }
+    const before: maze.Square = m.get(p.r, p.c);
+    deltas[0] = .{
+        .p = p,
+        .before = before,
+        .after = before | wall,
+        .burst = burst,
+    };
+    deltas[burst - 1].burst = burst;
+    m.getPtr(p.r, p.c).* |= (before & ~maze.path_bit) | wall;
+    try m.build_history.recordBurst(deltas[0..burst]);
+    return burst;
+}
+
 /// Builds a path at point p, recording the history. To build a path, the current square must be
 /// changed and surrounding squares must be notified a neighboring wall no longer exists. Allocation
 /// may fail while recording the history.
 pub fn buildPath(m: *maze.Maze, p: maze.Point) !usize {
-    var wall_changes: [5]maze.Delta = .{};
-    var burst = 1;
-    var square = m.get(p.row, p.col);
+    var wall_changes: [5]maze.Delta = undefined;
+    var burst: usize = 1;
+    var square = m.get(p.r, p.c);
     wall_changes[0] = .{
         .p = p,
         .before = square,

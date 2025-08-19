@@ -94,6 +94,18 @@ pub const Blueprint = struct {
     squares: []Square,
     rows: isize,
     cols: isize,
+
+    pub fn init(allocator: Allocator, r: isize, c: isize) !Blueprint {
+        const ret = Blueprint{
+            .squares = try allocator.alloc(Square, @intCast(r * c)),
+            .rows = r,
+            .cols = c,
+        };
+        for (ret.squares) |*s| {
+            s.* = 0;
+        }
+        return ret;
+    }
 };
 
 /// The Point is a simple helper to navigate squares in the maze. The fields are signed because this
@@ -170,11 +182,7 @@ pub const Maze = struct {
         const set_rows = (rows + 1) - @mod(rows, 2);
         const set_cols = (cols + 1) - @mod(cols, 2);
         return Maze{
-            .maze = Blueprint{
-                .rows = set_rows,
-                .cols = set_cols,
-                .squares = try allocator.alloc(Square, @intCast(set_rows * set_cols)),
-            },
+            .maze = try Blueprint.init(allocator, set_rows, set_cols),
             .build_history = Tape.init(allocator),
             .solve_history = Tape.init(allocator),
         };
