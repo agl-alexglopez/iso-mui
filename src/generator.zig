@@ -1,3 +1,18 @@
+//! The generator module is responsible for providing the core maze building utilities. The goal
+//! is for the constants, types, and/or functions offered here to be the bare minimum that maze
+//! building algorithms would need to implement their own functionality.
+//!
+//! Maze building algorithms can be divided into two major categories.
+//!
+//! 1. Path carving algorithms start with a maze that is completely filled with walls, and then it
+//!    carves out the paths.
+//! 2. Wall adder algorithms start with only an outline of the perimeter wall. All squares within
+//!    this perimeter are paths. The algorithm then builds and connects wall pieces.
+//!
+//! Therefore, this module should offer utilities for both types of algorithm, while not getting
+//! too specific to any builder. For example, while it might be easy to assume that recursive
+//! backtracking maze builders are the only type that uses backtracking, actually Wilson's algorithm
+//! for generating mazes makes great use of backtracking during its random walks.
 const maze = @import("maze.zig");
 
 /// Any builders that choose to cache seen squares in place can use this bit.
@@ -41,6 +56,8 @@ pub const backtracking_half_points: [5]maze.Point = .{
     .{ .r = 0, .c = -1 },
 };
 
+/// Returns true if the maze allows a square to be built on point next. It must be within the maze
+/// perimeter and not already built by the algorithm in prior exploration.
 pub fn canBuildNewSquare(m: *const maze.Maze, next: maze.Point) bool {
     return next.r > 0 and
         next.r < m.maze.rows - 1 and
@@ -49,6 +66,8 @@ pub fn canBuildNewSquare(m: *const maze.Maze, next: maze.Point) bool {
         (m.get(next.r, next.c) & builder_bit) == 0;
 }
 
+/// Prepares the maze for a path carving algorithm. All squares will become walls. Because the
+/// history of this action must be recorded in the maze Tape, allocation may fail.
 pub fn fillMazeWithWalls(m: *maze.Maze) !void {
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
@@ -57,6 +76,9 @@ pub fn fillMazeWithWalls(m: *maze.Maze) !void {
     }
 }
 
+/// Builds a wall at Point p. The Point must check its surrounding squares in cardinal directions
+/// to decide what shape it should take and how to connect to others. The history is recorded in
+/// the Tape and so allocation may fail.
 pub fn buildWall(m: *maze.Maze, p: maze.Point) !void {
     var wall: maze.Square = 0b0;
     if (p.r > 0) {
@@ -80,7 +102,10 @@ pub fn buildWall(m: *maze.Maze, p: maze.Point) !void {
     m.getPtr(p.r, p.c).* = wall;
 }
 
-pub fn buildPath(m: *maze.Maze, p: maze.Point) usize {
+/// Builds a path at point p, recording the history. To build a path, the current square must be
+/// changed and surrounding squares must be notified a neighboring wall no longer exists. Allocation
+/// may fail while recording the history.
+pub fn buildPath(m: *maze.Maze, p: maze.Point) !usize {
     var wall_changes: [5]maze.Delta = .{};
     var burst = 1;
     var square = m.get(p.row, p.col);
@@ -136,11 +161,14 @@ pub fn buildPath(m: *maze.Maze, p: maze.Point) usize {
         burst += 1;
     }
     wall_changes[0].burst = burst;
-    m.build_history.recordBurst(wall_changes[0..burst]);
+    try m.build_history.recordBurst(wall_changes[0..burst]);
     return burst;
 }
 
-pub fn carveWall(m: *maze.Maze, p: maze.Point, backtrack: maze.Square) !void {
+/// Carves the wall Square to become a path for backtracking. The current square records what
+/// direction it came from and also updates surrounding walls of a new path Square. History is
+/// recorded so allocation may fail.
+pub fn carveBacktrackSquare(m: *maze.Maze, p: maze.Point, backtrack: maze.Square) !void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
     const before = m.get(p.r, p.c);
@@ -211,8 +239,12 @@ pub fn carveWall(m: *maze.Maze, p: maze.Point, backtrack: maze.Square) !void {
     try m.build_history.recordBurst(wall_changes[0..burst]);
 }
 
-pub fn recordPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
-    try carveWall(m, cur, m.get(cur.r, cur.c) & backtrack_mask);
+/// Records the intended progress of the backtracking path from current to next. We progress the
+/// path by building from cur to next but leave backtracking marks leading from next to cur. Because
+/// we record this history allocation may fail. Assumes cur and next are not equal and returns
+/// an error if this is not the case.
+pub fn recordBacktrackPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
+    try carveBacktrackSquare(m, cur, m.get(cur.r, cur.c) & backtrack_mask);
     var wall = cur;
     var backtracking: maze.Square = 0;
     if (next.r < cur.r) {
@@ -228,10 +260,10 @@ pub fn recordPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !void {
         wall.c += 1;
         backtracking = from_west;
     } else {
-        return error.WallBreakError;
+        return error.CurAndNextWallAreInvalid;
     }
-    try carveWall(m, wall, backtracking);
-    try carveWall(m, next, backtracking);
+    try carveBacktrackSquare(m, wall, backtracking);
+    try carveBacktrackSquare(m, next, backtracking);
 }
 
 pub fn getSquare(s: maze.Square) []const u8 {

@@ -1,6 +1,7 @@
 const std = @import("std");
-const maze = @import("../maze.zig");
+
 const gen = @import("../generator.zig");
+const maze = @import("../maze.zig");
 
 pub fn generate(m: *maze.Maze) !*maze.Maze {
     try gen.fillMazeWithWalls(m);
@@ -12,7 +13,7 @@ pub fn generate(m: *maze.Maze) !*maze.Maze {
     };
     var cur = start;
     var random_direction_indices: [gen.num_directions]usize = .{ 0, 1, 2, 3 };
-    descending: while (true) {
+    branching: while (true) {
         rand.shuffle(usize, &random_direction_indices);
         for (random_direction_indices) |i| {
             const direction = gen.generator_cardinals[i];
@@ -21,11 +22,12 @@ pub fn generate(m: *maze.Maze) !*maze.Maze {
                 .c = cur.c + direction.c,
             };
             if (gen.canBuildNewSquare(m, branch)) {
-                try gen.recordPath(m, cur, branch);
+                try gen.recordBacktrackPath(m, cur, branch);
                 cur = branch;
-                continue :descending;
+                continue :branching;
             }
         }
+        // Backtracking.
         const direction: maze.Square = m.get(cur.r, cur.c) & gen.backtrack_mask;
         const half_point = gen.backtracking_half_points[@intCast(direction)];
         const half_step = maze.Point{
