@@ -266,6 +266,7 @@ pub fn recordBacktrackPath(m: *maze.Maze, cur: maze.Point, next: maze.Point) !vo
     try carveBacktrackSquare(m, next, backtracking);
 }
 
+/// Gets a string representation of a maze square. Right now only path or wall for debug print.
 pub fn getSquare(s: maze.Square) []const u8 {
     if ((s & maze.path_bit) == 0) {
         return maze.wallPiece(s);

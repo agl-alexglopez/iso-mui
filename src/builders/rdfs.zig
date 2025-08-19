@@ -1,8 +1,19 @@
+//! The Randomized Depth First search, or rdfs, module implements the most basic maze building
+//! algorithm, depth first search. It simply carves out paths by randomly branching down unexplored
+//! sections of the maze and carving paths. It records the backtracking directions and caches seen
+//! squares by modifying their bits so no auxiliary data structures or storage is needed. Only
+//! 4 bits are required to run all the logic of this algorithm. We do, however, use the Tape data
+//! structure to record the build process but this is for later display purposes.
+//!
+//! We need the help of the standard library for random generation and shuffling to produce uniform
+//! random mazes, but otherwise the algorithm is extremely simple and efficient.
 const std = @import("std");
 
 const gen = @import("../generator.zig");
 const maze = @import("../maze.zig");
 
+/// Generates a randomized depth first search maze. This maze will produce long windy passages.
+/// Because the building of the maze is recorded in the maze build history, allocation may fail.
 pub fn generate(m: *maze.Maze) !*maze.Maze {
     try gen.fillMazeWithWalls(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
@@ -53,6 +64,8 @@ pub fn generate(m: *maze.Maze) !*maze.Maze {
         const full_point = gen.backtracking_points[@intCast(direction)];
         cur.r += full_point.r;
         cur.c += full_point.c;
+
+        // Return to origin and so tree is complete.
         if (std.meta.eql(cur, start)) {
             return m;
         }
