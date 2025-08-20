@@ -1,4 +1,10 @@
+/// Standard library stuff.
 const std = @import("std");
+
+/// Raylib stuff.
+const rl = @import("raylib");
+
+/// Maze stuff.
 const maze = @import("maze.zig");
 const rdfs = @import("builders/rdfs.zig");
 const wilson = @import("builders/wilson_adder.zig");
@@ -13,7 +19,6 @@ const row_flag: []const u8 = "-r=";
 const col_flag: []const u8 = "-c=";
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut().writer();
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var maze_args = Args{};
     const allocator = arena.allocator();
@@ -35,10 +40,33 @@ pub fn main() !void {
         arena.deinit();
     }
     _ = try wilson.generate(&new_maze);
-    for (0..@intCast(new_maze.maze.rows)) |r| {
-        for (0..@intCast(new_maze.maze.cols)) |c| {
-            try stdout.print("{s}", .{gen.getSquare(new_maze.get(@intCast(r), @intCast(c)))});
-        }
-        try stdout.print("\n", .{});
+
+    // Initialization
+    //--------------------------------------------------------------------------------------
+    const screen_width = 800;
+    const screen_height = 450;
+
+    rl.initWindow(screen_width, screen_height, "zig-zag-mui");
+    defer rl.closeWindow(); // Close window and OpenGL context
+
+    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+    //--------------------------------------------------------------------------------------
+
+    // Main game loop
+    while (!rl.windowShouldClose()) { // Detect window close button or ESC key
+        // Update
+        //----------------------------------------------------------------------------------
+        // TODO: Update your variables here
+        //----------------------------------------------------------------------------------
+
+        // Draw
+        //----------------------------------------------------------------------------------
+        rl.beginDrawing();
+        defer rl.endDrawing();
+
+        rl.clearBackground(.white);
+
+        rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
+        //----------------------------------------------------------------------------------
     }
 }
