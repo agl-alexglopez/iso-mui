@@ -1,7 +1,7 @@
 const std = @import("std");
 const maze = @import("maze.zig");
 const rdfs = @import("builders/rdfs.zig");
-const wilson_adder = @import("builders/wilson_adder.zig");
+const wilson = @import("builders/wilson_adder.zig");
 const gen = @import("generator.zig");
 
 const Args = struct {
@@ -34,7 +34,7 @@ pub fn main() !void {
         new_maze.deinit(allocator);
         arena.deinit();
     }
-    _ = try wilson_adder.generate(&new_maze);
+    _ = try wilson.generate(&new_maze);
     for (0..@intCast(new_maze.maze.rows)) |r| {
         for (0..@intCast(new_maze.maze.cols)) |c| {
             try stdout.print("{s}", .{gen.getSquare(new_maze.get(@intCast(r), @intCast(c)))});
