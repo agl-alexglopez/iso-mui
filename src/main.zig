@@ -34,7 +34,7 @@ pub fn main() !void {
         new_maze.deinit(allocator);
         arena.deinit();
     }
-    _ = try wilson.generate(&new_maze);
+    _ = try rdfs.generate(&new_maze);
     for (0..@intCast(new_maze.maze.rows)) |r| {
         for (0..@intCast(new_maze.maze.cols)) |c| {
             try stdout.print("{s}", .{gen.getSquare(new_maze.get(@intCast(r), @intCast(c)))});

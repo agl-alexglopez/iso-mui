@@ -71,7 +71,6 @@ pub fn generate(
             continue :walking;
         }
     }
-    return m;
 }
 
 /// Takes the next step of the random walk and one of the following occurs.
