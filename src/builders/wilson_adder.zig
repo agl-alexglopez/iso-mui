@@ -167,15 +167,15 @@ fn connectWalk(
 ) !void {
     var cur = walk;
     while ((m.get(cur.r, cur.c) & gen.backtrack_mask) != 0) {
-        const dir = backtrackPoint(m, cur);
-        const half = backtrackHalfPoint(m, cur);
+        const full_offset = backtrackPoint(m, cur);
+        const half_offset = backtrackHalfPoint(m, cur);
         try buildWalkLine(m, cur);
         try buildWalkLine(m, .{
-            .r = cur.r + half.r,
-            .c = cur.c + half.c,
+            .r = cur.r + half_offset.r,
+            .c = cur.c + half_offset.c,
         });
-        cur.r += dir.r;
-        cur.c += dir.c;
+        cur.r += full_offset.r;
+        cur.c += full_offset.c;
     }
     try buildWalkLine(m, cur);
 }
