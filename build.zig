@@ -5,16 +5,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Core module and exe
-    const exe_mod = b.addModule("zig-zag-mui", .{
+    const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     const exe = b.addExecutable(.{
         .name = "zig-zag-mui",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = exe_mod,
     });
 
     // Dependencies for core exe.
