@@ -21,6 +21,8 @@
 //! Tape type that records the changes in the bits of our integer maze Square types. We have a huge
 //! amount of freedom then to animate this on the render side how we wish, completely separate from
 //! maze logic.
+const std = @import("std");
+const assert = std.debug.assert;
 
 /// Raylib is the graphics driving library for this application. Awesome!
 const rl = @import("raylib");
@@ -68,83 +70,134 @@ const WallAtlas = struct {
     }
 };
 
-var walls: WallAtlas = undefined;
-
-pub fn run(
-    m: *maze.Maze,
-    screen_width: i32,
-    screen_height: i32,
-) !void {
-    rl.initWindow(screen_width, screen_height, "zig-zag-mui");
-    defer rl.closeWindow(); // Close window and OpenGL context
-    rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
-    //
-    walls = WallAtlas{
-        .texture = try rl.loadTexture(WallAtlas.path ++ "atlas_maze_walls_test.png"),
-    };
-    rl.setTextureFilter(walls.texture, .point);
-
-    while (!rl.windowShouldClose()) {
-        rl.beginDrawing();
-        defer rl.endDrawing();
-
-        // Nested loop in case of
-        rl.clearBackground(.black);
-
-        // Draw actions here.
-        try renderMaze(m);
+pub const Render = struct {
+    walls: WallAtlas,
+    virtual_screen: rl.RenderTexture2D,
+    real_screen_dimensions: Point,
+    pub fn init(
+        m: *const maze.Maze,
+        screen_width: i32,
+        screen_height: i32,
+    ) !Render {
+        comptime assert(WallAtlas.area.x >= 0 and WallAtlas.area.y >= 0);
+        comptime assert(WallAtlas.square.x >= 0 and WallAtlas.square.y >= 0);
+        comptime assert(WallAtlas.dimensions.x >= 0 and WallAtlas.dimensions.y >= 0);
+        rl.initWindow(screen_width, screen_height, "zig-zag-mui");
+        rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+        const cols: i32 = @intCast(m.maze.cols);
+        const rows: i32 = @intCast(m.maze.rows);
+        const r = Render{
+            .walls = WallAtlas{
+                .texture = try rl.loadTexture(WallAtlas.path ++ "atlas_maze_walls_test.png"),
+            },
+            .virtual_screen = try rl.loadRenderTexture(
+                cols * WallAtlas.square.x,
+                rows * WallAtlas.square.y,
+            ),
+            .real_screen_dimensions = Point{
+                .x = screen_width,
+                .y = screen_height,
+            },
+        };
+        return r;
     }
-}
 
-/// Performs a pass over the maze rendering the current state given the status of the Square bits.
-fn renderMaze(
-    m: *const maze.Maze,
-) !void {
-    // Draw entire maze every frame.
-    {
-        var r_pixel: f32 = 0.0;
-        var r: isize = 0;
-        while (r < m.maze.rows) : ({
-            r += 1;
-            r_pixel += WallAtlas.square.y;
-        }) {
-            var c_pixel: f32 = 0.0;
-            var c: isize = 0;
-            while (c < m.maze.cols) : ({
-                c += 1;
-                c_pixel += WallAtlas.square.x;
-            }) {
-                if (m.isPath(r, c)) {
-                    continue;
-                }
-                const square_bits: maze.Square = m.get(@intCast(r), @intCast(c));
-                const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-                const atlas_square = Point{
-                    .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
-                    .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
-                };
-                rl.drawTexturePro(
-                    walls.texture,
-                    rl.Rectangle{
-                        .x = @floatFromInt(atlas_square.x),
-                        .y = @floatFromInt(atlas_square.y),
-                        .width = @floatFromInt(WallAtlas.square.x),
-                        .height = @floatFromInt(WallAtlas.square.y),
-                    },
-                    rl.Rectangle{
-                        .x = c_pixel,
-                        .y = r_pixel,
-                        .width = @as(f32, WallAtlas.square.x),
-                        .height = @as(f32, WallAtlas.square.y),
-                    },
-                    rl.Vector2{
-                        .x = 0,
-                        .y = 0,
-                    },
-                    0.0,
-                    .ray_white,
-                );
-            }
+    pub fn deinit() void {
+        rl.closeWindow();
+    }
+
+    pub fn run(
+        self: *const Render,
+        m: *maze.Maze,
+    ) void {
+        while (!rl.windowShouldClose()) {
+            self.renderMaze(m);
+
+            // Note that if any new textures are loaded the old one must be unloaded here.
         }
     }
-}
+
+    /// Performs pass over maze rendering the current state given the status of the Square bits.
+    fn renderMaze(
+        self: *const Render,
+        m: *const maze.Maze,
+    ) void {
+        rl.beginTextureMode(self.virtual_screen);
+        // Nested loop in case of
+        rl.clearBackground(.black);
+        {
+            var r_pixel: f32 = 0.0;
+            var r: isize = 0;
+            while (r < m.maze.rows) : ({
+                r += 1;
+                r_pixel += WallAtlas.square.y;
+            }) {
+                var c_pixel: f32 = 0.0;
+                var c: isize = 0;
+                while (c < m.maze.cols) : ({
+                    c += 1;
+                    c_pixel += WallAtlas.square.x;
+                }) {
+                    if (m.isPath(r, c)) {
+                        continue;
+                    }
+                    const square_bits: maze.Square = m.get(r, c);
+                    const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+                    const atlas_square = Point{
+                        .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
+                        .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
+                    };
+                    rl.drawTexturePro(
+                        self.walls.texture,
+                        rl.Rectangle{
+                            .x = @floatFromInt(atlas_square.x),
+                            .y = @floatFromInt(atlas_square.y),
+                            .width = @floatFromInt(WallAtlas.square.x),
+                            .height = @floatFromInt(WallAtlas.square.y),
+                        },
+                        rl.Rectangle{
+                            .x = c_pixel,
+                            .y = r_pixel,
+                            .width = @as(f32, WallAtlas.square.x),
+                            .height = @as(f32, WallAtlas.square.y),
+                        },
+                        rl.Vector2{
+                            .x = 0,
+                            .y = 0,
+                        },
+                        0.0,
+                        .ray_white,
+                    );
+                }
+            }
+        }
+        rl.endTextureMode();
+
+        // Draw virtual maze to screen all at once scaled at will.
+        rl.beginDrawing();
+        defer rl.endDrawing();
+        rl.clearBackground(.black);
+
+        rl.drawTexturePro(
+            self.virtual_screen.texture,
+            rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(self.virtual_screen.texture.width),
+                .height = @floatFromInt(self.virtual_screen.texture.height),
+            },
+            rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(self.real_screen_dimensions.x),
+                .height = @floatFromInt(self.real_screen_dimensions.y),
+            },
+            rl.Vector2{
+                .x = 0,
+                .y = 0,
+            },
+            0.0,
+            .ray_white,
+        );
+    }
+};
