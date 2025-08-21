@@ -44,7 +44,7 @@ pub const wall_shift: usize = 24;
 /// as the neighboring walls are built or destroyed. This table has all 16 possible combinations of
 /// wall shapes covered and therefore by masking and obtaining the wall bits from a square we can
 /// index into this table with those bits and print the correct character.
-pub const walls = [16][]const u8{
+pub const walls = [16][:0]const u8{
     "■", // 0b0000 walls do not exist around me
     "╵", // 0b0001 wall North
     "╶", // 0b0010 wall East
@@ -268,7 +268,7 @@ pub const Maze = struct {
 /// Provide the square as is with no shifts or modifications. Assumes the square is a wall.
 pub fn wallPiece(
     square: Square,
-) []const u8 {
+) [:0]const u8 {
     return walls[((square & wall_mask) >> wall_shift)];
 }
 

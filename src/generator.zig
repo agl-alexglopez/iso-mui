@@ -458,7 +458,7 @@ pub fn recordBacktrackPath(
 /// Gets a string representation of a maze square. Right now only path or wall for debug print.
 pub fn getSquare(
     s: maze.Square,
-) []const u8 {
+) [:0]const u8 {
     if ((s & maze.path_bit) == 0) {
         return maze.wallPiece(s);
     } else {
