@@ -112,7 +112,6 @@ pub const Render = struct {
     ) void {
         while (!rl.windowShouldClose()) {
             self.renderMaze(m);
-
             // Note that if any new textures are loaded the old one must be unloaded here.
         }
     }
@@ -122,8 +121,8 @@ pub const Render = struct {
         self: *const Render,
         m: *const maze.Maze,
     ) void {
+        // First, draw the maze as the user has specified to a pixel perfect virtual screen.
         rl.beginTextureMode(self.virtual_screen);
-        // Nested loop in case of
         rl.clearBackground(.black);
         {
             var r_pixel: f32 = 0.0;
@@ -173,11 +172,11 @@ pub const Render = struct {
         }
         rl.endTextureMode();
 
-        // Draw virtual maze to screen all at once scaled at will.
+        // Next, draw virtual picture perfect maze to screen all at once scaled as we need.
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.black);
-
+        rl.setTextureFilter(self.virtual_screen.texture, .point);
         rl.drawTexturePro(
             self.virtual_screen.texture,
             rl.Rectangle{
