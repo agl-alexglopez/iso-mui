@@ -65,8 +65,10 @@ const WallAtlas = struct {
     pub const dimensions: Point = .{ .x = 4, .y = 4 };
     texture: rl.Texture2D,
 
-    pub fn toPixelX(wall_bit_index: usize) f32 {
-        return (wall_bit_index % dimensions.x) * area.x;
+    pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
+        return WallAtlas{
+            .texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
+        };
     }
 };
 
@@ -87,10 +89,8 @@ pub const Render = struct {
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
-            .walls = WallAtlas{
-                .texture = try rl.loadTexture(WallAtlas.path ++ "atlas_maze_walls_test.png"),
-            },
-            .virtual_screen = try rl.loadRenderTexture(
+            .walls = try WallAtlas.init("atlas_maze_walls_test.png"),
+            .virtual_screen = try rl.RenderTexture2D.init(
                 cols * WallAtlas.square.x,
                 rows * WallAtlas.square.y,
             ),
