@@ -40,7 +40,7 @@ const asset_path: [:0]const u8 = "assets/";
 ///  |
 ///  V
 /// (Y)
-const Point = struct {
+const Xy = struct {
     x: i32,
     y: i32,
 };
@@ -58,11 +58,11 @@ const WallAtlas = struct {
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = "assets/atlas/";
     /// The total area of the texture atlas grid in pixels.
-    pub const area: Point = .{ .x = 128, .y = 128 };
+    pub const area: Xy = .{ .x = 128, .y = 128 };
     /// The area of a single maze wall shape square.
-    pub const square: Point = .{ .x = 32, .y = 32 };
+    pub const square: Xy = .{ .x = 32, .y = 32 };
     // The number of rows and columns for a wall texture atlas.
-    pub const dimensions: Point = .{ .x = 4, .y = 4 };
+    pub const dimensions: Xy = .{ .x = 4, .y = 4 };
     texture: rl.Texture2D,
 
     pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
@@ -70,12 +70,20 @@ const WallAtlas = struct {
             .texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
         };
     }
+
+    pub fn getPixelPoint(square_bits: maze.Square) Xy {
+        const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+        return Xy{
+            .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
+            .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
+        };
+    }
 };
 
 pub const Render = struct {
     walls: WallAtlas,
     virtual_screen: rl.RenderTexture2D,
-    real_screen_dimensions: Point,
+    real_screen_dimensions: Xy,
     pub fn init(
         m: *const maze.Maze,
         screen_width: i32,
@@ -89,12 +97,12 @@ pub const Render = struct {
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
-            .walls = try WallAtlas.init("atlas_maze_walls_test.png"),
+            .walls = try WallAtlas.init("atlas_maze_walls_trees.png"),
             .virtual_screen = try rl.RenderTexture2D.init(
                 cols * WallAtlas.square.x,
                 rows * WallAtlas.square.y,
             ),
-            .real_screen_dimensions = Point{
+            .real_screen_dimensions = Xy{
                 .x = screen_width,
                 .y = screen_height,
             },
@@ -125,27 +133,16 @@ pub const Render = struct {
         rl.beginTextureMode(self.virtual_screen);
         rl.clearBackground(.black);
         {
-            var r_pixel: f32 = 0.0;
             var r: isize = 0;
-            while (r < m.maze.rows) : ({
-                r += 1;
-                r_pixel += WallAtlas.square.y;
-            }) {
-                var c_pixel: f32 = 0.0;
+            while (r < m.maze.rows) : (r += 1) {
                 var c: isize = 0;
-                while (c < m.maze.cols) : ({
-                    c += 1;
-                    c_pixel += WallAtlas.square.x;
-                }) {
+                while (c < m.maze.cols) : (c += 1) {
                     if (m.isPath(r, c)) {
                         continue;
                     }
-                    const square_bits: maze.Square = m.get(r, c);
-                    const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-                    const atlas_square = Point{
-                        .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
-                        .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
-                    };
+                    const r_pixel: isize = r * WallAtlas.square.y;
+                    const c_pixel: isize = c * WallAtlas.square.x;
+                    const atlas_square: Xy = WallAtlas.getPixelPoint(m.get(r, c));
                     rl.drawTexturePro(
                         self.walls.texture,
                         rl.Rectangle{
@@ -155,10 +152,10 @@ pub const Render = struct {
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
                         rl.Rectangle{
-                            .x = c_pixel,
-                            .y = r_pixel,
-                            .width = @as(f32, WallAtlas.square.x),
-                            .height = @as(f32, WallAtlas.square.y),
+                            .x = @floatFromInt(c_pixel),
+                            .y = @floatFromInt(r_pixel),
+                            .width = @floatFromInt(WallAtlas.square.x),
+                            .height = @floatFromInt(WallAtlas.square.y),
                         },
                         rl.Vector2{
                             .x = 0,
@@ -172,7 +169,7 @@ pub const Render = struct {
         }
         rl.endTextureMode();
 
-        // Next, draw virtual picture perfect maze to screen all at once scaled as we need.
+        // Next, draw virtual pixel perfect maze to screen all at once scaled as we need.
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.black);
@@ -183,7 +180,8 @@ pub const Render = struct {
                 .x = 0,
                 .y = 0,
                 .width = @floatFromInt(self.virtual_screen.texture.width),
-                .height = @floatFromInt(self.virtual_screen.texture.height),
+                // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
+                .height = @floatFromInt(-self.virtual_screen.texture.height),
             },
             rl.Rectangle{
                 .x = 0,

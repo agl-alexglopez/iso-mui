@@ -40,13 +40,6 @@ const Args = struct {
     }
 };
 
-fn roundup(n: isize, multiple: isize) isize {
-    if (multiple == 0) {
-        return n;
-    }
-    return @divTrunc((n + multiple - 1), multiple) * multiple;
-}
-
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var maze_args = Args{};
@@ -61,12 +54,12 @@ pub fn main() !void {
             return error.UnrecognizedCommandLineArgument;
         }
     }
-    const screen_width: i32 = @intCast(roundup(1000, 4));
-    const screen_height: i32 = @intCast(roundup(1000, 3));
+    const screen_width: i32 = 1920;
+    const screen_height: i32 = 1440;
     var labyrinth: maze.Maze = try maze.Maze.init(
         allocator,
-        roundup(maze_args.rows, 3),
-        roundup(maze_args.cols, 4),
+        maze_args.rows,
+        maze_args.cols,
     );
     defer {
         labyrinth.deinit(allocator);
