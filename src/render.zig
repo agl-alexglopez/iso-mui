@@ -124,7 +124,7 @@ pub const Render = struct {
             s.* = 0b0;
         }
         var t: f64 = 0.0;
-        const dt: f64 = 0.001;
+        const dt: f64 = 0.01;
         var cur_time: f64 = rl.getTime();
         var accumulate: f64 = 0.0;
         while (!rl.windowShouldClose()) {
@@ -185,7 +185,7 @@ pub const Render = struct {
                         },
                         rl.Rectangle{
                             .x = @floatFromInt(x_start + ((c - r) * @divTrunc(WallAtlas.square.x, 2))),
-                            .y = @floatFromInt(y_start + ((c + r) * @divTrunc(WallAtlas.square.y / 2, 2))),
+                            .y = @floatFromInt(y_start + ((c + r) * @divTrunc(WallAtlas.square.y, 4))),
                             .width = @floatFromInt(WallAtlas.square.x),
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
