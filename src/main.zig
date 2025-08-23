@@ -65,7 +65,7 @@ pub fn main() !void {
         labyrinth.deinit(allocator);
         arena.deinit();
     }
-    _ = try wilson.generate(&labyrinth);
+    _ = try rdfs.generate(&labyrinth);
 
     // Rendering code when maze is complete.
     const loop = try render.Render.init(&labyrinth, screen_width, screen_height);

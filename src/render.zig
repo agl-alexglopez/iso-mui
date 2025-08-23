@@ -120,10 +120,38 @@ pub const Render = struct {
         self: *const Render,
         m: *maze.Maze,
     ) void {
+        for (m.maze.squares) |*s| {
+            s.* = 0b0;
+        }
+        var t: f64 = 0.0;
+        const dt: f64 = 0.001;
+        var cur_time: f64 = rl.getTime();
+        var accumulate: f64 = 0.0;
         while (!rl.windowShouldClose()) {
+            const new_time: f64 = rl.getTime();
+            const frame_time: f64 = rl.getFrameTime();
+            cur_time = new_time;
+            accumulate += frame_time;
+            while (accumulate >= dt) {
+                updateSquares(m);
+                t += dt;
+                accumulate -= dt;
+            }
             self.renderMaze(m);
             // Note that if any new textures are loaded the old one must be unloaded here.
         }
+    }
+
+    fn updateSquares(m: *maze.Maze) void {
+        if (m.build_history.i >= m.build_history.deltas.items.len) {
+            return;
+        }
+        const end = m.build_history.deltas.items[m.build_history.i].burst;
+        for (m.build_history.i..m.build_history.i + end) |i| {
+            const d: maze.Delta = m.build_history.deltas.items[i];
+            m.getPtr(d.p.r, d.p.c).* = d.after;
+        }
+        m.build_history.i += @max(end, 1);
     }
 
     /// Performs pass over maze rendering the current state given the status of the Square bits.
