@@ -72,11 +72,13 @@ const WallAtlas = struct {
     }
 
     pub fn getPixelPoint(square_bits: maze.Square) Xy {
-        const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-        return Xy{
-            .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
-            .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
-        };
+        _ = square_bits;
+        // const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+        // return Xy{
+        //     .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
+        //     .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
+        // };
+        return Xy{ .x = 0, .y = 0 };
     }
 };
 
@@ -97,7 +99,7 @@ pub const Render = struct {
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
-            .walls = try WallAtlas.init("atlas_maze_walls_trees.png"),
+            .walls = try WallAtlas.init("atlas_maze_walls_isometric.png"),
             .virtual_screen = try rl.RenderTexture2D.init(
                 cols * WallAtlas.square.x,
                 rows * WallAtlas.square.y,
@@ -133,6 +135,8 @@ pub const Render = struct {
         rl.beginTextureMode(self.virtual_screen);
         rl.clearBackground(.black);
         {
+            const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) - @divTrunc(WallAtlas.square.x, 2);
+            const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
             var r: isize = 0;
             while (r < m.maze.rows) : (r += 1) {
                 var c: isize = 0;
@@ -140,8 +144,6 @@ pub const Render = struct {
                     if (m.isPath(r, c)) {
                         continue;
                     }
-                    const r_pixel: isize = r * WallAtlas.square.y;
-                    const c_pixel: isize = c * WallAtlas.square.x;
                     const atlas_square: Xy = WallAtlas.getPixelPoint(m.get(r, c));
                     rl.drawTexturePro(
                         self.walls.texture,
@@ -152,8 +154,8 @@ pub const Render = struct {
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
                         rl.Rectangle{
-                            .x = @floatFromInt(c_pixel),
-                            .y = @floatFromInt(r_pixel),
+                            .x = @floatFromInt(x_start + ((c - r) * @divTrunc(WallAtlas.square.x, 2))),
+                            .y = @floatFromInt(y_start + ((c + r) * @divTrunc(WallAtlas.square.y / 2, 2))),
                             .width = @floatFromInt(WallAtlas.square.x),
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
