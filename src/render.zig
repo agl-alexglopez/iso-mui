@@ -141,10 +141,12 @@ pub const Render = struct {
             while (r < m.maze.rows) : (r += 1) {
                 var c: isize = 0;
                 while (c < m.maze.cols) : (c += 1) {
-                    if (m.isPath(r, c)) {
-                        continue;
-                    }
-                    const atlas_square: Xy = WallAtlas.getPixelPoint(m.get(r, c));
+                    const atlas_square: Xy = blk: {
+                        if (m.isPath(r, c)) {
+                            break :blk Xy{ .x = 0, .y = 0 };
+                        }
+                        break :blk Xy{ .x = 32, .y = 0 };
+                    };
                     rl.drawTexturePro(
                         self.walls.texture,
                         rl.Rectangle{
