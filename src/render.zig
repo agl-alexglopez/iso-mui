@@ -58,8 +58,6 @@ const Xy = struct {
 /// is isometric pixel art which means the output is rotated and tiled differently than a top down
 /// pixel art style. Any sprite sheets added for wall atlases must draw squares in a 2:1 width to
 /// height ratio within a square.
-///
-///
 const WallAtlas = struct {
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = "assets/atlas/";
@@ -75,33 +73,47 @@ const WallAtlas = struct {
     pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
         return WallAtlas{
             .wall_texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
+            // The backtracking squares never change styles so we can hard code them here.
             .backtrack_texture = try rl.Texture2D.init(
                 WallAtlas.path ++ "atlas_maze_walls_backtrack.png",
             ),
         };
     }
 
-    pub fn getTexturePosition(
+    /// Given a square returns the texture and pixel (x, y) coordinates on that texture that should
+    /// be rendered as the source rectangle.
+    fn getTextureSrc(
         self: *const WallAtlas,
         square_bits: maze.Square,
-    ) struct { rl.Texture2D, Xy } {
+    ) struct { rl.Texture2D, rl.Rectangle } {
         if (gen.hasBacktracking(square_bits)) {
             const i: i32 = @intCast((square_bits & gen.backtrack_mask) - 1);
             return .{
-                self.backtrack_texture, Xy{
-                    .x = @mod(i, backtrack_dimensions.x) * square.x,
-                    .y = @divTrunc(i, backtrack_dimensions.y) * square.y,
+                self.backtrack_texture, rl.Rectangle{
+                    .x = @floatFromInt(@mod(i, backtrack_dimensions.x) * square.x),
+                    .y = @floatFromInt(@divTrunc(i, backtrack_dimensions.y) * square.y),
+                    .width = @floatFromInt(WallAtlas.square.x),
+                    .height = @floatFromInt(WallAtlas.square.y),
                 },
             };
         }
         if (maze.isPath(square_bits)) {
-            return .{ self.wall_texture, Xy{ .x = 0, .y = 0 } };
+            return .{
+                self.wall_texture, rl.Rectangle{
+                    .x = 0.0,
+                    .y = 0.0,
+                    .width = @floatFromInt(WallAtlas.square.x),
+                    .height = @floatFromInt(WallAtlas.square.y),
+                },
+            };
         }
         const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
         return .{
-            self.wall_texture, Xy{
-                .x = @mod(wall_i, wall_dimensions.x) * square.x,
-                .y = @divFloor(wall_i, wall_dimensions.y) * square.y,
+            self.wall_texture, rl.Rectangle{
+                .x = @floatFromInt(@mod(wall_i, wall_dimensions.x) * square.x),
+                .y = @floatFromInt(@divTrunc(wall_i, wall_dimensions.y) * square.y),
+                .width = @floatFromInt(WallAtlas.square.x),
+                .height = @floatFromInt(WallAtlas.square.y),
             },
         };
     }
@@ -191,20 +203,15 @@ pub const Render = struct {
             while (r < m.maze.rows) : (r += 1) {
                 var c: i32 = 0;
                 while (c < m.maze.cols) : (c += 1) {
-                    const atlas_source: struct { rl.Texture2D, Xy } =
-                        self.atlas.getTexturePosition(m.get(r, c));
+                    const texture_source: struct { rl.Texture2D, rl.Rectangle } =
+                        self.atlas.getTextureSrc(m.get(r, c));
                     const isometric_x: i32 = x_start + ((c - r) *
                         @divTrunc(WallAtlas.square.x, 2));
                     const isometric_y: i32 = y_start + ((c + r) *
                         @divTrunc(WallAtlas.square.y, 4));
                     rl.drawTexturePro(
-                        atlas_source[0],
-                        rl.Rectangle{
-                            .x = @floatFromInt(atlas_source[1].x),
-                            .y = @floatFromInt(atlas_source[1].y),
-                            .width = @floatFromInt(WallAtlas.square.x),
-                            .height = @floatFromInt(WallAtlas.square.y),
-                        },
+                        texture_source[0],
+                        texture_source[1],
                         rl.Rectangle{
                             .x = @floatFromInt(isometric_x),
                             .y = @floatFromInt(isometric_y),
@@ -223,7 +230,7 @@ pub const Render = struct {
         }
         rl.endTextureMode();
 
-        // Next, draw virtual pixel perfect maze to screen all at once scaled as we need.
+        // Now actually draw to real screen and let raylib figure out the scaling.
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(.black);
