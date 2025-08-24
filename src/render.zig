@@ -53,7 +53,12 @@ const Xy = struct {
 /// size which we must hand code here.
 ///
 /// One should never alter the size of the atlas map when reading in the squares. Output may be
-/// scaled up or down according to preference and graphics library capabilities.
+/// scaled up or down according to preference and graphics library capabilities. The current style
+/// is isometric pixel art which means the output is rotated and tiled differently than a top down
+/// pixel art style. Any sprite sheets added for wall atlases must draw squares in a 2:1 width to
+/// height ratio within a square.
+///
+///
 const WallAtlas = struct {
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = "assets/atlas/";
@@ -72,13 +77,11 @@ const WallAtlas = struct {
     }
 
     pub fn getPixelPoint(square_bits: maze.Square) Xy {
-        _ = square_bits;
-        // const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-        // return Xy{
-        //     .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
-        //     .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
-        // };
-        return Xy{ .x = 0, .y = 0 };
+        const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+        return Xy{
+            .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
+            .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
+        };
     }
 };
 
@@ -120,9 +123,6 @@ pub const Render = struct {
         self: *const Render,
         m: *maze.Maze,
     ) void {
-        for (m.maze.squares) |*s| {
-            s.* = 0b0;
-        }
         var t: f64 = 0.0;
         const dt: f64 = 0.01;
         var cur_time: f64 = rl.getTime();
@@ -165,27 +165,31 @@ pub const Render = struct {
         {
             const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) - @divTrunc(WallAtlas.square.x, 2);
             const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
-            var r: isize = 0;
+            var r: i32 = 0;
             while (r < m.maze.rows) : (r += 1) {
-                var c: isize = 0;
+                var c: i32 = 0;
                 while (c < m.maze.cols) : (c += 1) {
-                    const atlas_square: Xy = blk: {
+                    const atlas_pixels: Xy = blk: {
                         if (m.isPath(r, c)) {
                             break :blk Xy{ .x = 0, .y = 0 };
                         }
-                        break :blk Xy{ .x = 32, .y = 0 };
+                        break :blk WallAtlas.getPixelPoint(m.get(r, c));
                     };
+                    const isometric_x: i32 = x_start + ((c - r) *
+                        @divTrunc(WallAtlas.square.x, 2));
+                    const isometric_y: i32 = y_start + ((c + r) *
+                        @divTrunc(WallAtlas.square.y, 4));
                     rl.drawTexturePro(
                         self.walls.texture,
                         rl.Rectangle{
-                            .x = @floatFromInt(atlas_square.x),
-                            .y = @floatFromInt(atlas_square.y),
+                            .x = @floatFromInt(atlas_pixels.x),
+                            .y = @floatFromInt(atlas_pixels.y),
                             .width = @floatFromInt(WallAtlas.square.x),
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
                         rl.Rectangle{
-                            .x = @floatFromInt(x_start + ((c - r) * @divTrunc(WallAtlas.square.x, 2))),
-                            .y = @floatFromInt(y_start + ((c + r) * @divTrunc(WallAtlas.square.y, 4))),
+                            .x = @floatFromInt(isometric_x),
+                            .y = @floatFromInt(isometric_y),
                             .width = @floatFromInt(WallAtlas.square.x),
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
