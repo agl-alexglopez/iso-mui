@@ -122,6 +122,10 @@ pub fn choosePointFromRow(
     return null;
 }
 
+pub fn hasBacktracking(square: maze.Square) bool {
+    return (square & backtrack_mask) != 0;
+}
+
 /// Returns true if the maze allows a square to be built on point next. It must be within the maze
 /// perimeter and not already built by the algorithm in prior exploration.
 pub fn canBuildNewSquare(

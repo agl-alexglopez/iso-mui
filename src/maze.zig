@@ -272,6 +272,12 @@ pub fn wallPiece(
     return walls[((square & wall_mask) >> wall_shift)];
 }
 
+pub fn isPath(
+    square: Square,
+) bool {
+    return (square & path_bit) != 0;
+}
+
 /////////////////////////////////////    Tests     ////////////////////////////////////////////////
 
 test "maze square flat 2D buffer multiplication getters" {

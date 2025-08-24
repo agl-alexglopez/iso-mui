@@ -28,6 +28,7 @@ const assert = std.debug.assert;
 const rl = @import("raylib");
 
 const maze = @import("maze.zig");
+const gen = @import("generator.zig");
 
 /// We will place any texture atlas for any wall styles we want in an asset folder. This is where
 /// we should also find solver animations (torch light, explorers, who knows).
@@ -63,30 +64,51 @@ const WallAtlas = struct {
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = "assets/atlas/";
     /// The total area of the texture atlas grid in pixels.
-    pub const area: Xy = .{ .x = 128, .y = 128 };
     /// The area of a single maze wall shape square.
     pub const square: Xy = .{ .x = 32, .y = 32 };
     // The number of rows and columns for a wall texture atlas.
-    pub const dimensions: Xy = .{ .x = 4, .y = 4 };
-    texture: rl.Texture2D,
+    pub const wall_dimensions: Xy = .{ .x = 4, .y = 4 };
+    pub const backtrack_dimensions: Xy = .{ .x = 2, .y = 2 };
+    wall_texture: rl.Texture2D,
+    backtrack_texture: rl.Texture2D,
 
     pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
         return WallAtlas{
-            .texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
+            .wall_texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
+            .backtrack_texture = try rl.Texture2D.init(
+                WallAtlas.path ++ "atlas_maze_walls_backtrack.png",
+            ),
         };
     }
 
-    pub fn getPixelPoint(square_bits: maze.Square) Xy {
+    pub fn getTexturePosition(
+        self: *const WallAtlas,
+        square_bits: maze.Square,
+    ) struct { rl.Texture2D, Xy } {
+        if (gen.hasBacktracking(square_bits)) {
+            const i: i32 = @intCast((square_bits & gen.backtrack_mask) - 1);
+            return .{
+                self.backtrack_texture, Xy{
+                    .x = @mod(i, backtrack_dimensions.x) * square.x,
+                    .y = @divTrunc(i, backtrack_dimensions.y) * square.y,
+                },
+            };
+        }
+        if (maze.isPath(square_bits)) {
+            return .{ self.wall_texture, Xy{ .x = 0, .y = 0 } };
+        }
         const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-        return Xy{
-            .x = @mod(wall_i, WallAtlas.dimensions.x) * WallAtlas.square.x,
-            .y = @divFloor(wall_i, WallAtlas.dimensions.y) * WallAtlas.square.y,
+        return .{
+            self.wall_texture, Xy{
+                .x = @mod(wall_i, wall_dimensions.x) * square.x,
+                .y = @divFloor(wall_i, wall_dimensions.y) * square.y,
+            },
         };
     }
 };
 
 pub const Render = struct {
-    walls: WallAtlas,
+    atlas: WallAtlas,
     virtual_screen: rl.RenderTexture2D,
     real_screen_dimensions: Xy,
     pub fn init(
@@ -94,15 +116,14 @@ pub const Render = struct {
         screen_width: i32,
         screen_height: i32,
     ) !Render {
-        comptime assert(WallAtlas.area.x >= 0 and WallAtlas.area.y >= 0);
         comptime assert(WallAtlas.square.x >= 0 and WallAtlas.square.y >= 0);
-        comptime assert(WallAtlas.dimensions.x >= 0 and WallAtlas.dimensions.y >= 0);
+        comptime assert(WallAtlas.wall_dimensions.x >= 0 and WallAtlas.wall_dimensions.y >= 0);
         rl.initWindow(screen_width, screen_height, "zig-zag-mui");
         rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
-            .walls = try WallAtlas.init("atlas_maze_walls_isometric.png"),
+            .atlas = try WallAtlas.init("atlas_maze_walls_isometric.png"),
             .virtual_screen = try rl.RenderTexture2D.init(
                 cols * WallAtlas.square.x,
                 rows * WallAtlas.square.y,
@@ -124,7 +145,7 @@ pub const Render = struct {
         m: *maze.Maze,
     ) void {
         var t: f64 = 0.0;
-        const dt: f64 = 0.02;
+        const dt: f64 = 0.1;
         var cur_time: f64 = rl.getTime();
         var accumulate: f64 = 0.0;
         while (!rl.windowShouldClose()) {
@@ -163,27 +184,24 @@ pub const Render = struct {
         rl.beginTextureMode(self.virtual_screen);
         rl.clearBackground(.black);
         {
-            const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) - @divTrunc(WallAtlas.square.x, 2);
+            const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) -
+                @divTrunc(WallAtlas.square.x, 2);
             const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
             var r: i32 = 0;
             while (r < m.maze.rows) : (r += 1) {
                 var c: i32 = 0;
                 while (c < m.maze.cols) : (c += 1) {
-                    const atlas_pixels: Xy = blk: {
-                        if (m.isPath(r, c)) {
-                            break :blk Xy{ .x = 0, .y = 0 };
-                        }
-                        break :blk WallAtlas.getPixelPoint(m.get(r, c));
-                    };
+                    const atlas_source: struct { rl.Texture2D, Xy } =
+                        self.atlas.getTexturePosition(m.get(r, c));
                     const isometric_x: i32 = x_start + ((c - r) *
                         @divTrunc(WallAtlas.square.x, 2));
                     const isometric_y: i32 = y_start + ((c + r) *
                         @divTrunc(WallAtlas.square.y, 4));
                     rl.drawTexturePro(
-                        self.walls.texture,
+                        atlas_source[0],
                         rl.Rectangle{
-                            .x = @floatFromInt(atlas_pixels.x),
-                            .y = @floatFromInt(atlas_pixels.y),
+                            .x = @floatFromInt(atlas_source[1].x),
+                            .y = @floatFromInt(atlas_source[1].y),
                             .width = @floatFromInt(WallAtlas.square.x),
                             .height = @floatFromInt(WallAtlas.square.y),
                         },
