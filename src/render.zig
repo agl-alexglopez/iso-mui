@@ -124,7 +124,7 @@ pub const Render = struct {
         m: *maze.Maze,
     ) void {
         var t: f64 = 0.0;
-        const dt: f64 = 0.01;
+        const dt: f64 = 0.02;
         var cur_time: f64 = rl.getTime();
         var accumulate: f64 = 0.0;
         while (!rl.windowShouldClose()) {
