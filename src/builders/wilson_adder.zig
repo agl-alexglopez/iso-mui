@@ -109,7 +109,7 @@ fn nextStep(
         };
         return true;
     }
-    try markWall(m, walk.walk, walk.next);
+    try markWall(m, walk);
     walk.prev = walk.walk;
     walk.walk = walk.next;
     return true;
@@ -185,34 +185,33 @@ fn connectWalk(
 /// built maze has been found so we continue building, leaving backtracking marks for ourselves.
 fn markWall(
     m: *maze.Maze,
-    walk: maze.Point,
-    next: maze.Point,
+    this_walk: *const RandomWalk,
 ) !void {
-    var wall = walk;
-    const next_before = m.get(next.r, next.c);
+    var wall = this_walk.walk;
+    const next_before = m.get(this_walk.next.r, this_walk.next.c);
     var wall_before: maze.Square = undefined;
-    if (next.r > walk.r) {
+    if (this_walk.next.r > this_walk.walk.r) {
         wall.r += 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_north) & ~maze.path_bit;
-        m.getPtr(next.r, next.c).* = (next_before | gen.from_north) & ~maze.path_bit;
-    } else if (next.r < walk.r) {
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_north) & ~maze.path_bit;
+    } else if (this_walk.next.r < this_walk.walk.r) {
         wall.r -= 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_south) & ~maze.path_bit;
-        m.getPtr(next.r, next.c).* = (next_before | gen.from_south) & ~maze.path_bit;
-    } else if (next.c < walk.c) {
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_south) & ~maze.path_bit;
+    } else if (this_walk.next.c < this_walk.walk.c) {
         wall.c -= 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_east) & ~maze.path_bit;
-        m.getPtr(next.r, next.c).* = (next_before | gen.from_east) & ~maze.path_bit;
-    } else if (next.c > walk.c) {
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_east) & ~maze.path_bit;
+    } else if (this_walk.next.c > this_walk.walk.c) {
         wall.c += 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_west) & ~maze.path_bit;
-        m.getPtr(next.r, next.c).* = (next_before | gen.from_west) & ~maze.path_bit;
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_west) & ~maze.path_bit;
     } else {
-        return error.NextAndWalkAreEqual;
+        return error.nextAndWalkAreEqual;
     }
     try m.build_history.record(.{
         .p = wall,
@@ -221,9 +220,9 @@ fn markWall(
         .burst = 1,
     });
     try m.build_history.record(.{
-        .p = next,
+        .p = this_walk.next,
         .before = next_before,
-        .after = m.get(next.r, next.c),
+        .after = m.get(this_walk.next.r, this_walk.next.c),
         .burst = 1,
     });
 }
