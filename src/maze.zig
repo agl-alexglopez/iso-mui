@@ -135,7 +135,7 @@ pub const Delta = struct {
 /// we can play the maze algorithms forward or in reverse in whatever format we please. The
 /// algorithms can also be stepped through for better understanding after we record the history.
 pub const Tape = struct {
-    deltas: std.ArrayList(Delta),
+    deltas: std.array_list.Managed(Delta),
     i: usize,
 
     /// A Tape uses a dynamic storage method for Deltas so needs an allocator.
@@ -143,7 +143,7 @@ pub const Tape = struct {
         allocator: Allocator,
     ) Tape {
         return Tape{
-            .deltas = std.ArrayList(Delta).init(allocator),
+            .deltas = std.array_list.Managed(Delta).init(allocator),
             .i = 0,
         };
     }

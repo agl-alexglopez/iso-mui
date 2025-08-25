@@ -1,10 +1,8 @@
-/// Standard library stuff.
+// Standard library stuff.
 const std = @import("std");
-
-/// Rendering pipeline module.
+// Rendering pipeline module.
 const render = @import("render.zig");
-
-/// Maze stuff.
+// Maze stuff.
 const maze = @import("maze.zig");
 const rdfs = @import("builders/rdfs.zig");
 const wilson = @import("builders/wilson_adder.zig");
