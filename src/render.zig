@@ -64,7 +64,7 @@ pub const Render = struct {
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
-            .atlas = try WallAtlas.init("atlas_maze_walls_isometric.png"),
+            .atlas = try WallAtlas.init("atlas_maze_walls_isometric_animated.png"),
             .virtual_screen = try rl.RenderTexture2D.init(
                 cols * WallAtlas.sprite_pixels.x,
                 rows * WallAtlas.sprite_pixels.y,
@@ -87,22 +87,67 @@ pub const Render = struct {
         self: *const Render,
         m: *maze.Maze,
     ) void {
-        var t: f64 = 0.0;
-        const dt: f64 = 0.05;
+        seedAnimations(m);
+        var algorithm_t: f64 = 0.0;
+        var animation_t: f64 = 0.0;
+        const animation_dt: f64 = 0.1;
+        const algorithm_dt: f64 = 0.05;
         var cur_time: f64 = rl.getTime();
-        var accumulate: f64 = 0.0;
+        var algorithm_accumulate: f64 = 0.0;
+        var animation_accumulate: f64 = 0.0;
         while (!rl.windowShouldClose()) {
             const new_time: f64 = rl.getTime();
             const frame_time: f64 = rl.getFrameTime();
             cur_time = new_time;
-            accumulate += frame_time;
-            while (accumulate >= dt) {
+            algorithm_accumulate += frame_time;
+            animation_accumulate += frame_time;
+            while (algorithm_accumulate >= algorithm_dt) {
                 updateSquares(m);
-                t += dt;
-                accumulate -= dt;
+                algorithm_t += algorithm_dt;
+                algorithm_accumulate -= algorithm_dt;
+            }
+            while (animation_accumulate >= animation_dt) {
+                updateAnimations(m);
+                animation_t += animation_dt;
+                animation_accumulate -= animation_dt;
             }
             self.renderMaze(m);
             // Note that if any new textures are loaded the old one must be unloaded here.
+        }
+    }
+
+    fn seedAnimations(m: *maze.Maze) void {
+        var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
+        var r: i32 = 0;
+        while (r < m.maze.rows) : (r += 1) {
+            var c: i32 = 0;
+            while (c < m.maze.cols) : (c += 1) {
+                if (m.isPath(r, c)) {
+                    continue;
+                }
+                const seed: maze.Square = randgen.random().intRangeAtMost(maze.Square, 1, 15);
+                m.getPtr(r, c).* &= ~WallAtlas.animation_mask;
+                m.getPtr(r, c).* |= @intCast(seed << WallAtlas.animation_shift);
+            }
+        }
+    }
+
+    fn updateAnimations(m: *maze.Maze) void {
+        var r: i32 = 0;
+        while (r < m.maze.rows) : (r += 1) {
+            var c: i32 = 0;
+            while (c < m.maze.cols) : (c += 1) {
+                if (m.isPath(r, c)) {
+                    continue;
+                }
+                var animation_frame: i32 = @intCast((m.get(r, c) & WallAtlas.animation_mask) >>
+                    WallAtlas.animation_shift);
+                animation_frame = animation_frame + 1;
+                animation_frame &= (WallAtlas.animation_mask >> WallAtlas.animation_shift);
+                animation_frame = @max(animation_frame, 1);
+                m.getPtr(r, c).* &= ~WallAtlas.animation_mask;
+                m.getPtr(r, c).* |= @intCast(animation_frame << WallAtlas.animation_shift);
+            }
         }
     }
 
@@ -126,7 +171,7 @@ pub const Render = struct {
     ) void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
         rl.beginTextureMode(self.virtual_screen);
-        rl.clearBackground(.black);
+        rl.clearBackground(.ray_white);
         {
             const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) -
                 @divTrunc(WallAtlas.sprite_pixels.x, 2);
@@ -167,7 +212,7 @@ pub const Render = struct {
         // Now actually draw to real screen and let raylib figure out the scaling.
         rl.beginDrawing();
         defer rl.endDrawing();
-        rl.clearBackground(.black);
+        rl.clearBackground(.ray_white);
         rl.setTextureFilter(self.virtual_screen.texture, .point);
         // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
         const inverted_virtual_height: i32 = -self.virtual_screen.texture.height;
@@ -217,6 +262,8 @@ const WallAtlas = struct {
     pub const wall_dimensions: Xy = .{ .x = 4, .y = 4 };
     /// The dimensions of the backtracking square texture. Pixel dimensions are the same.
     pub const backtrack_dimensions: Xy = .{ .x = 2, .y = 2 };
+    const animation_mask: maze.Square = 0xf00000;
+    const animation_shift: usize = 20;
 
     /// The atlas used to load different wall shapes based on connections after building.
     wall_texture: rl.Texture2D,
@@ -261,7 +308,14 @@ const WallAtlas = struct {
                 },
             };
         }
-        const wall_i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+        const wall_i: i32 = blk: {
+            if (isWallAnimated(square_bits)) {
+                const i: i32 = @intCast((square_bits & animation_mask) >> animation_shift);
+                break :blk i;
+            }
+            const i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
+            break :blk i;
+        };
         return .{
             self.wall_texture, rl.Rectangle{
                 .x = @floatFromInt(@mod(wall_i, wall_dimensions.x) * sprite_pixels.x),
@@ -270,6 +324,10 @@ const WallAtlas = struct {
                 .height = @floatFromInt(WallAtlas.sprite_pixels.y),
             },
         };
+    }
+
+    fn isWallAnimated(square_bits: maze.Square) bool {
+        return square_bits & animation_mask != 0;
     }
 };
 
