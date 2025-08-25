@@ -27,12 +27,18 @@ const assert = std.debug.assert;
 /// Raylib is the graphics driving library for this application. Awesome!
 const rl = @import("raylib");
 
+/// Low level maze helper module for the core Square type and grid indexing logic.
 const maze = @import("maze.zig");
+/// The maze generator module for maze building related helpers and logic.
 const gen = @import("generator.zig");
 
 /// We will place any texture atlas for any wall styles we want in an asset folder. This is where
 /// we should also find solver animations (torch light, explorers, who knows).
 const asset_path: [:0]const u8 = "assets/";
+/// Walls can be efficiently stored and displayed in a 4x4 grid, aka a tile map or tile atlas.
+const atlas_folder: [:0]const u8 = "atlas/";
+/// Backtracking is the same texture no matter the style so leave it here.
+const backtracking_texture_atlas: [:0]const u8 = "atlas_maze_walls_backtrack.png";
 
 /// A type for modeling anything that needs and x and y position, coordinate, or size. In graphics
 /// X is the starting horizontal coordinate at (0, 0) then increasing to the right. The Y is the
@@ -41,6 +47,10 @@ const asset_path: [:0]const u8 = "assets/";
 ///  |
 ///  V
 /// (Y)
+/// One notable exception is when drawing to a virtual screen the y axis is inverted. This is
+/// relevant to pixel art because all dimensions of every sprite are known. Therefore it is easier
+/// to draw to a virtual pixel perfect screen first and then draw that entire screen to the real
+/// screen that users see. When drawing virtual to real, the height must be inverted.
 const Xy = struct {
     x: i32,
     y: i32,
@@ -60,22 +70,27 @@ const Xy = struct {
 /// height ratio within a square.
 const WallAtlas = struct {
     /// The location of all texture atlas files of *.json and *.png type.
-    pub const path: [:0]const u8 = "assets/atlas/";
+    pub const path: [:0]const u8 = asset_path ++ atlas_folder;
     /// The total area of the texture atlas grid in pixels.
     /// The area of a single maze wall shape square.
     pub const square: Xy = .{ .x = 32, .y = 32 };
-    // The number of rows and columns for a wall texture atlas.
+    /// The number of rows and columns for a wall texture atlas.
     pub const wall_dimensions: Xy = .{ .x = 4, .y = 4 };
+    /// The dimensions of the backtracking square texture. Pixel dimensions are the same.
     pub const backtrack_dimensions: Xy = .{ .x = 2, .y = 2 };
+
+    /// The atlas used to load different wall shapes based on connections after building.
     wall_texture: rl.Texture2D,
+    /// Texture used to aid in visual representation of backtracking during building.
     backtrack_texture: rl.Texture2D,
 
+    /// Initialize the wall texture atlas by loading its files with Raylib.
     pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
         return WallAtlas{
             .wall_texture = try rl.Texture2D.init(WallAtlas.path ++ file_name),
             // The backtracking squares never change styles so we can hard code them here.
             .backtrack_texture = try rl.Texture2D.init(
-                WallAtlas.path ++ "atlas_maze_walls_backtrack.png",
+                WallAtlas.path ++ backtracking_texture_atlas,
             ),
         };
     }
@@ -119,6 +134,9 @@ const WallAtlas = struct {
     }
 };
 
+/// A Render wraps the library being used to render textures and shapes so that the calling code
+/// does not need to have a dependency on the specific library being used. Now we use Raylib and
+/// pixel art, but with this design that may change in the future.
 pub const Render = struct {
     atlas: WallAtlas,
     virtual_screen: rl.RenderTexture2D,
@@ -131,7 +149,7 @@ pub const Render = struct {
         comptime assert(WallAtlas.square.x >= 0 and WallAtlas.square.y >= 0);
         comptime assert(WallAtlas.wall_dimensions.x >= 0 and WallAtlas.wall_dimensions.y >= 0);
         rl.initWindow(screen_width, screen_height, "zig-zag-mui");
-        rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
+        rl.setTargetFPS(60);
         const cols: i32 = @intCast(m.maze.cols);
         const rows: i32 = @intCast(m.maze.rows);
         const r = Render{
@@ -148,10 +166,12 @@ pub const Render = struct {
         return r;
     }
 
+    /// Frees any resources used by the Render type and the library it uses.
     pub fn deinit() void {
         rl.closeWindow();
     }
 
+    /// The run loop continues until the user has exited the application by closing the window.
     pub fn run(
         self: *const Render,
         m: *maze.Maze,
@@ -175,6 +195,7 @@ pub const Render = struct {
         }
     }
 
+    /// Performs only the updates specified by the next step of the Tape.
     fn updateSquares(m: *maze.Maze) void {
         if (m.build_history.i >= m.build_history.deltas.items.len) {
             return;
@@ -235,14 +256,15 @@ pub const Render = struct {
         defer rl.endDrawing();
         rl.clearBackground(.black);
         rl.setTextureFilter(self.virtual_screen.texture, .point);
+        // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
+        const inverted_virtual_height: i32 = -self.virtual_screen.texture.height;
         rl.drawTexturePro(
             self.virtual_screen.texture,
             rl.Rectangle{
                 .x = 0,
                 .y = 0,
                 .width = @floatFromInt(self.virtual_screen.texture.width),
-                // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
-                .height = @floatFromInt(-self.virtual_screen.texture.height),
+                .height = @floatFromInt(inverted_virtual_height),
             },
             rl.Rectangle{
                 .x = 0,
