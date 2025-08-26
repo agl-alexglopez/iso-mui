@@ -87,7 +87,6 @@ pub const Render = struct {
         self: *const Render,
         m: *maze.Maze,
     ) void {
-        seedAnimations(m);
         var algorithm_t: f64 = 0.0;
         var animation_t: f64 = 0.0;
         const animation_dt: f64 = 0.1;
@@ -113,22 +112,6 @@ pub const Render = struct {
             }
             self.renderMaze(m);
             // Note that if any new textures are loaded the old one must be unloaded here.
-        }
-    }
-
-    fn seedAnimations(m: *maze.Maze) void {
-        var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
-        var r: i32 = 0;
-        while (r < m.maze.rows) : (r += 1) {
-            var c: i32 = 0;
-            while (c < m.maze.cols) : (c += 1) {
-                if (m.isPath(r, c)) {
-                    continue;
-                }
-                const seed: maze.Square = randgen.random().intRangeAtMost(maze.Square, 1, 15);
-                m.getPtr(r, c).* &= ~WallAtlas.animation_mask;
-                m.getPtr(r, c).* |= @intCast(seed << WallAtlas.animation_shift);
-            }
         }
     }
 
@@ -308,14 +291,8 @@ const WallAtlas = struct {
                 },
             };
         }
-        const wall_i: i32 = blk: {
-            if (isWallAnimated(square_bits)) {
-                const i: i32 = @intCast((square_bits & animation_mask) >> animation_shift);
-                break :blk i;
-            }
-            const i: i32 = @intCast((square_bits & maze.wall_mask) >> maze.wall_shift);
-            break :blk i;
-        };
+        const wall_i: i32 =
+            @intCast((square_bits & animation_mask) >> animation_shift);
         return .{
             self.wall_texture, rl.Rectangle{
                 .x = @floatFromInt(@mod(wall_i, wall_dimensions.x) * sprite_pixels.x),
