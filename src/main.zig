@@ -42,6 +42,7 @@ pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     var maze_args = Args{};
     const allocator = arena.allocator();
+    defer arena.deinit();
     for (std.os.argv[1..]) |a| {
         const arg = std.mem.span(a);
         if (std.mem.startsWith(u8, arg, Args.row_flag)) {
@@ -54,19 +55,15 @@ pub fn main() !void {
     }
     const screen_width: i32 = 1920;
     const screen_height: i32 = 1440;
-    var labyrinth: maze.Maze = try maze.Maze.init(
+
+    // Rendering code when maze is complete.
+    var loop = try render.Render.init(
         allocator,
         maze_args.rows,
         maze_args.cols,
+        screen_width,
+        screen_height,
     );
-    defer {
-        labyrinth.deinit(allocator);
-        arena.deinit();
-    }
-    _ = try rdfs.generate(&labyrinth);
-
-    // Rendering code when maze is complete.
-    const loop = try render.Render.init(&labyrinth, screen_width, screen_height);
-    defer render.Render.deinit();
-    loop.run(&labyrinth);
+    defer loop.deinit();
+    try loop.run();
 }

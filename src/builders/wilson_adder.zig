@@ -194,22 +194,26 @@ fn markWall(
         wall.r += 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_north) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_north) & ~maze.path_bit;
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_north) &
+            ~maze.path_bit;
     } else if (this_walk.next.r < this_walk.walk.r) {
         wall.r -= 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_south) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_south) & ~maze.path_bit;
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_south) &
+            ~maze.path_bit;
     } else if (this_walk.next.c < this_walk.walk.c) {
         wall.c -= 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_east) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_east) & ~maze.path_bit;
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_east) &
+            ~maze.path_bit;
     } else if (this_walk.next.c > this_walk.walk.c) {
         wall.c += 1;
         wall_before = m.get(wall.r, wall.c);
         m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_west) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_west) & ~maze.path_bit;
+        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_west) &
+            ~maze.path_bit;
     } else {
         return error.nextAndWalkAreEqual;
     }
