@@ -110,6 +110,14 @@ pub const Blueprint = struct {
         }
         return ret;
     }
+
+    pub fn deinit(
+        self: *Blueprint,
+        allocator: Allocator,
+    ) void {
+        allocator.free(self.squares);
+        self.* = undefined;
+    }
 };
 
 /// The Point is a simple helper to navigate squares in the maze. The fields are signed because this
@@ -211,7 +219,7 @@ pub const Maze = struct {
         self: *Maze,
         allocator: Allocator,
     ) void {
-        allocator.free(self.maze.squares);
+        self.maze.deinit(allocator);
         self.build_history.deinit();
         self.solve_history.deinit();
         self.* = undefined;
