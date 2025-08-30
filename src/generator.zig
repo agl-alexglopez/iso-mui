@@ -76,7 +76,7 @@ pub fn randPoint(
     parity: ParityPoint,
 ) !maze.Point {
     if ((row_range[0] >= row_range[1]) or (col_range[0] >= col_range[1])) {
-        return error.InvalidRange;
+        return maze.MazeError.LogicFail;
     }
     return .{
         .r = 2 * (@divTrunc(rand.intRangeAtMost(isize, row_range[0], row_range[1]), 2)) +
@@ -108,7 +108,7 @@ pub fn choosePointFromRow(
 ) !?maze.Point {
     std.debug.assert(start_row >= 0);
     if (@mod(start_row, 2) != (@intFromEnum(parity) % 2)) {
-        return error.StartRowAndParityDoNotMatch;
+        return maze.MazeError.LogicFail;
     }
     var r: isize = @intCast(start_row);
     while (r < m.maze.rows - 1) : (r += 2) {
@@ -357,7 +357,7 @@ pub fn carveBacktrackSquare(
     m: *maze.Maze,
     p: maze.Point,
     backtrack: maze.Square,
-) !void {
+) maze.MazeError!void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
     const before = m.get(p.r, p.c);
@@ -436,7 +436,7 @@ pub fn recordBacktrackPath(
     m: *maze.Maze,
     cur: maze.Point,
     next: maze.Point,
-) !void {
+) maze.MazeError!void {
     try carveBacktrackSquare(m, cur, m.get(cur.r, cur.c) & backtrack_mask);
     var wall = cur;
     var backtracking: maze.Square = 0;
@@ -453,7 +453,7 @@ pub fn recordBacktrackPath(
         wall.c += 1;
         backtracking = from_west;
     } else {
-        return error.CurAndNextWallAreInvalid;
+        return maze.MazeError.LogicFail;
     }
     try carveBacktrackSquare(m, wall, backtracking);
     try carveBacktrackSquare(m, next, backtracking);

@@ -59,6 +59,7 @@ pub const Render = struct {
     atlas: WallAtlas,
     virtual_screen: rl.RenderTexture2D,
     real_screen_dimensions: Xy,
+    menu: Menu,
 
     /// Initialize the render context.
     pub fn init(
@@ -87,6 +88,7 @@ pub const Render = struct {
                 .x = screen_width,
                 .y = screen_height,
             },
+            .menu = Menu.init(),
         };
         return r;
     }
@@ -129,7 +131,7 @@ pub const Render = struct {
                 animation_t += animation_dt;
                 animation_accumulate -= animation_dt;
             }
-            self.render(&self.maze);
+            self.render();
             // Note that if any new textures are loaded the old one must be unloaded here.
         }
     }
@@ -192,8 +194,7 @@ pub const Render = struct {
 
     /// Performs pass over maze rendering the current state given the status of the Square bits.
     fn render(
-        self: *const Render,
-        m: *const maze.Maze,
+        self: *Render,
     ) void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
         rl.beginTextureMode(self.virtual_screen);
@@ -203,10 +204,10 @@ pub const Render = struct {
                 @divTrunc(WallAtlas.sprite_pixels.x, 2);
             const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
             var r: i32 = 0;
-            while (r < m.maze.rows) : (r += 1) {
+            while (r < self.maze.maze.rows) : (r += 1) {
                 var c: i32 = 0;
-                while (c < m.maze.cols) : (c += 1) {
-                    self.atlas.drawMazeTexture(m, r, c, x_start, y_start);
+                while (c < self.maze.maze.cols) : (c += 1) {
+                    self.atlas.drawMazeTexture(&self.maze, r, c, x_start, y_start);
                 }
             }
         }
@@ -240,6 +241,7 @@ pub const Render = struct {
             0.0,
             .ray_white,
         );
+        self.menu.drawMenu();
     }
 };
 
@@ -354,6 +356,113 @@ const WallAtlas = struct {
             },
             0.0,
             .ray_white,
+        );
+    }
+};
+
+const Menu = struct {
+    const Direction = enum {
+        forward,
+        reverse,
+    };
+    const Generator = enum(u32) {
+        rdfs = 0,
+        wilson_adder = 1,
+    };
+    const Solver = enum(u32) {
+        dfs = 0,
+        bfs = 1,
+    };
+    const default_animation_dt: f64 = 0.195;
+
+    /// The generator table stores the functions available that we have imported. These can be
+    /// selected via an enum as index.
+    const generator_table: [2]struct { [:0]const u8, *const fn (*maze.Maze) maze.MazeError!*maze.Maze } = .{
+        .{ "RDFS", rdfs.generate },
+        .{ "Wilson's Adder", wilson.generate },
+    };
+    const generator_options: [:0]const u8 = generator_table[0][0] ++ ";" ++ generator_table[1][0];
+
+    // Tuple selectors. Tuples in Zig are convenient for grouping together loose logic of similar
+    // but not identical types. The indexing syntax of tuples can be vague so these indices will
+    // help the reader understand what field of the tuple is being accessed.
+
+    /// The tuple field holding the rl.Rectangle dimensions of the box.
+    const dimension = 0;
+    /// The tuple field holding the active selection integer we can turn into an int.
+    const active = 1;
+    /// The tuple field determining if the drop down is editable.
+    const editmode = 2;
+
+    const dropdown_width = 100;
+    const dropdown_height = 20;
+    const label_height = 20;
+    const x_padding = 20;
+
+    generator: struct {
+        rl.Rectangle,
+        i32,
+        bool,
+    } = .{
+        rl.Rectangle{
+            .x = 0 + x_padding,
+            .y = label_height,
+            .width = dropdown_width,
+            .height = dropdown_height,
+        },
+        0,
+        false,
+    },
+    solver: struct {
+        rl.Rectangle,
+        i32,
+        bool,
+    } = .{
+        rl.Rectangle{
+            .x = (dropdown_width) + x_padding,
+            .y = label_height,
+            .width = dropdown_width,
+            .height = dropdown_height,
+        },
+        0,
+        false,
+    },
+    dir: struct {
+        rl.Rectangle,
+        i32,
+        bool,
+    } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + x_padding,
+            .y = label_height,
+            .width = dropdown_width,
+            .height = dropdown_height,
+        },
+        0,
+        false,
+    },
+    speed: f64 = default_animation_dt,
+
+    fn init() Menu {
+        rg.loadStyleDefault();
+        return Menu{};
+    }
+
+    fn drawMenu(self: *Menu) void {
+        _ = rg.label(
+            rl.Rectangle{
+                .x = self.generator[dimension].x,
+                .y = 1,
+                .width = self.generator[dimension].width,
+                .height = self.generator[dimension].height,
+            },
+            "Generator:",
+        );
+        _ = rg.dropdownBox(
+            self.generator[dimension],
+            Menu.generator_options,
+            &self.generator[active],
+            self.generator[editmode],
         );
     }
 };

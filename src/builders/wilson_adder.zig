@@ -37,7 +37,7 @@ const RandomWalk = struct {
 /// connecting walls and there is a perimeter of complete walls around the maze.
 pub fn generate(
     m: *maze.Maze,
-) !*maze.Maze {
+) maze.MazeError!*maze.Maze {
     try gen.buildWallPerimeter(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
@@ -83,7 +83,7 @@ pub fn generate(
 fn nextStep(
     m: *maze.Maze,
     walk: *RandomWalk,
-) !bool {
+) maze.MazeError!bool {
     if (gen.isBuilt(m, walk.next)) {
         try closeGap(m, walk.walk, walk.next);
         try connectWalk(m, walk.walk);
@@ -186,7 +186,7 @@ fn connectWalk(
 fn markWall(
     m: *maze.Maze,
     this_walk: *const RandomWalk,
-) !void {
+) maze.MazeError!void {
     var wall = this_walk.walk;
     const next_before = m.get(this_walk.next.r, this_walk.next.c);
     var wall_before: maze.Square = undefined;
@@ -215,7 +215,7 @@ fn markWall(
         m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_west) &
             ~maze.path_bit;
     } else {
-        return error.nextAndWalkAreEqual;
+        return maze.MazeError.LogicFail;
     }
     try m.build_history.record(.{
         .p = wall,
@@ -322,7 +322,7 @@ fn closeGap(
     m: *maze.Maze,
     cur: maze.Point,
     next: maze.Point,
-) !void {
+) maze.MazeError!void {
     var wall = cur;
     if (next.r < cur.r) {
         wall.r -= 1;
@@ -333,7 +333,7 @@ fn closeGap(
     } else if (next.c > cur.c) {
         wall.c += 1;
     } else {
-        return error.CurAndNextAreEqual;
+        return maze.MazeError.LogicFail;
     }
     try buildWalkLine(m, wall);
 }

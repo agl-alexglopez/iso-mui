@@ -16,7 +16,7 @@ const maze = @import("../maze.zig");
 /// Because the building of the maze is recorded in the maze build history, allocation may fail.
 pub fn generate(
     m: *maze.Maze,
-) !*maze.Maze {
+) maze.MazeError!*maze.Maze {
     try gen.fillMazeWithWalls(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();

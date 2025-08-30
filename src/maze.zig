@@ -21,6 +21,9 @@ pub const Square = u32;
 
 ////////////////////////////////////////    Constants    //////////////////////////////////////////
 
+/// While building and solving allocation of memory may fail or an impossible logical state may be
+/// reached. In either case the error should be returned.
+pub const MazeError = error{ AllocFail, LogicFail };
 /// The bit that signifies this is a navigable path.
 pub const path_bit: Square = 0x20000000;
 /// The bit signifying a wall to the north of the current square exists.
@@ -168,8 +171,8 @@ pub const Tape = struct {
     pub fn record(
         self: *Tape,
         delta: Delta,
-    ) !void {
-        try self.deltas.append(delta);
+    ) MazeError!void {
+        _ = self.deltas.append(delta) catch return MazeError.AllocFail;
     }
 
     /// Record a burst of deltas that correspond to a series of changes in squares that should
@@ -177,14 +180,14 @@ pub const Tape = struct {
     pub fn recordBurst(
         self: *Tape,
         burst: []const Delta,
-    ) !void {
+    ) MazeError!void {
         if (self.deltas.items.len != 0 and
             ((burst[0].burst != burst.len) or
                 (burst[burst.len - 1].burst != burst.len)))
         {
-            return error.IllFormedDeltaBurst;
+            return MazeError.LogicFail;
         }
-        try self.deltas.appendSlice(burst);
+        _ = self.deltas.appendSlice(burst) catch return MazeError.AllocFail;
     }
 };
 
