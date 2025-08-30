@@ -360,6 +360,10 @@ const WallAtlas = struct {
     }
 };
 
+/// The Menu displays various controls at the top of the screen while allowing the user to interact
+/// with the maze. The user can select algorithms, speeds, and directions that the algorithms run.
+/// Therefore, the Menu module is responsible for drawing but may mutate the maze as requested by
+/// the user.
 const Menu = struct {
     const Direction = enum {
         forward,
