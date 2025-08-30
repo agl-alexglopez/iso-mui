@@ -390,6 +390,7 @@ const Menu = struct {
     const direction_options: [:0]const u8 = "Forward;Reverse";
 
     const dropdown_width = 150;
+    const playback_width = 100;
     const dropdown_height = 20;
     const label_height = 20;
     const x_padding = 20;
@@ -420,15 +421,41 @@ const Menu = struct {
         .active = 0,
         .editmode = false,
     },
-    dir: Dropdown = .{
-        .dimensions = rl.Rectangle{
+    start: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
             .x = (dropdown_width * 2) + x_padding,
             .y = label_height,
-            .width = dropdown_width,
+            .width = playback_width,
             .height = dropdown_height,
         },
-        .active = 0,
-        .editmode = false,
+        rg.IconName.filetype_video,
+    },
+    reverse: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + playback_width + x_padding,
+            .y = label_height,
+            .width = playback_width,
+            .height = dropdown_height,
+        },
+        rg.IconName.player_previous,
+    },
+    pause: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + (playback_width * 2) + x_padding,
+            .y = label_height,
+            .width = playback_width,
+            .height = dropdown_height,
+        },
+        rg.IconName.player_pause,
+    },
+    forward: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + (playback_width * 3) + x_padding,
+            .y = label_height,
+            .width = playback_width,
+            .height = dropdown_height,
+        },
+        rg.IconName.player_next,
     },
     speed: f64 = default_animation_dt,
 
@@ -440,7 +467,18 @@ const Menu = struct {
     fn drawMenu(self: *Menu) void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
-        drawDropdown("Direction:", Menu.direction_options, &self.dir);
+        if (drawButton("Start:", self.start)) {
+            // Restart maze with the specified dropdown options.
+        }
+        if (drawButton("Reverse:", self.reverse)) {
+            // change direction.
+        }
+        if (drawButton("Pause:", self.pause)) {
+            // change direction.
+        }
+        if (drawButton("Forward:", self.forward)) {
+            // change direction.
+        }
     }
 
     fn drawDropdown(
@@ -465,6 +503,22 @@ const Menu = struct {
         ) != 0) {
             dropdown.editmode = !dropdown.editmode;
         }
+    }
+
+    fn drawButton(
+        label: [:0]const u8,
+        button: struct { rl.Rectangle, rg.IconName },
+    ) bool {
+        _ = rg.label(
+            rl.Rectangle{
+                .x = button[0].x,
+                .y = 1,
+                .width = button[0].width,
+                .height = button[0].height,
+            },
+            label,
+        );
+        return rg.button(button[0], rg.iconText(@intFromEnum(button[1]), ""));
     }
 };
 
