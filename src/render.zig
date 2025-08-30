@@ -389,11 +389,13 @@ const Menu = struct {
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
 
-    const dropdown_width = 150;
-    const playback_width = 100;
+    const dropdown_width = 200;
+    const playback_width = 200;
     const dropdown_height = 20;
     const label_height = 20;
     const x_padding = 20;
+
+    const green_hex = 0x00FF00FF;
 
     const Dropdown = struct {
         dimensions: rl.Rectangle,
@@ -457,27 +459,53 @@ const Menu = struct {
         },
         rg.IconName.player_next,
     },
+    slower: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + (playback_width * 4) + x_padding,
+            .y = label_height,
+            .width = playback_width,
+            .height = dropdown_height,
+        },
+        rg.IconName.arrow_down_fill,
+    },
+    faster: struct { rl.Rectangle, rg.IconName } = .{
+        rl.Rectangle{
+            .x = (dropdown_width * 2) + (playback_width * 5) + x_padding,
+            .y = label_height,
+            .width = playback_width,
+            .height = dropdown_height,
+        },
+        rg.IconName.arrow_up_fill,
+    },
     speed: f64 = default_animation_dt,
 
     fn init() Menu {
         rg.loadStyleDefault();
+        rg.setStyle(.default, .{ .default = rg.DefaultProperty.text_size }, 20);
+        rg.setStyle(.default, .{ .control = rg.ControlProperty.text_color_normal }, green_hex);
         return Menu{};
     }
 
     fn drawMenu(self: *Menu) void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
-        if (drawButton("Start:", self.start)) {
+        if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
         }
         if (drawButton("Reverse:", self.reverse)) {
             // change direction.
         }
         if (drawButton("Pause:", self.pause)) {
-            // change direction.
+            // Stop algorithm
         }
         if (drawButton("Forward:", self.forward)) {
             // change direction.
+        }
+        if (drawButton("Slower:", self.slower)) {
+            // change speed.
+        }
+        if (drawButton("Faster:", self.faster)) {
+            // change speed.
         }
     }
 
