@@ -506,6 +506,7 @@ const Menu = struct {
         _ = m;
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
+        // Restart forces us to act upon any changes in the drop down menus.
         if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
         }
