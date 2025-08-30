@@ -241,7 +241,7 @@ pub const Render = struct {
             0.0,
             .ray_white,
         );
-        self.menu.drawMenu();
+        self.menu.drawMenu(&self.maze);
     }
 };
 
@@ -486,7 +486,15 @@ const Menu = struct {
         return Menu{};
     }
 
-    fn drawMenu(self: *Menu) void {
+    /// Draws the menu elements and handles any menu interactions that require updating the maze.
+    /// For example, if the user has changed menu items and requests a maze reset, it must be
+    /// rebuilt and solved under the specified algorithm categories. Otherwise, the user can
+    /// control the direction of the playback and the speed which requires an immediate action.
+    fn drawMenu(
+        self: *Menu,
+        m: *maze.Maze,
+    ) void {
+        _ = m;
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
         if (drawButton("Restart:", self.start)) {
