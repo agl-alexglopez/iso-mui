@@ -403,6 +403,11 @@ const Menu = struct {
         editmode: bool,
     };
 
+    const Button = struct {
+        dimensions: rl.Rectangle,
+        icon: rg.IconName,
+    };
+
     generator: Dropdown = .{
         .dimensions = rl.Rectangle{
             .x = 0 + x_padding,
@@ -423,59 +428,59 @@ const Menu = struct {
         .active = 0,
         .editmode = false,
     },
-    start: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    start: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.filetype_video,
+        .icon = rg.IconName.filetype_video,
     },
-    reverse: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    reverse: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + playback_width + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.player_previous,
+        .icon = rg.IconName.player_previous,
     },
-    pause: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    pause: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + (playback_width * 2) + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.player_pause,
+        .icon = rg.IconName.player_pause,
     },
-    forward: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    forward: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + (playback_width * 3) + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.player_next,
+        .icon = rg.IconName.player_next,
     },
-    slower: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    slower: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + (playback_width * 4) + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.arrow_down_fill,
+        .icon = rg.IconName.arrow_down_fill,
     },
-    faster: struct { rl.Rectangle, rg.IconName } = .{
-        rl.Rectangle{
+    faster: Button = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + (playback_width * 5) + x_padding,
             .y = label_height,
             .width = playback_width,
             .height = dropdown_height,
         },
-        rg.IconName.arrow_up_fill,
+        .icon = rg.IconName.arrow_up_fill,
     },
     speed: f64 = default_animation_dt,
 
@@ -517,6 +522,9 @@ const Menu = struct {
         }
     }
 
+    /// Draws the drop down and allows user to mutate active selection. However, no action needs
+    /// be taken until the user requests a restart under the current selections. This simplifies
+    /// the process of menu handling and number of restarts required to rebuild and solve a maze.
     fn drawDropdown(
         label: [:0]const u8,
         comptime options: [:0]const u8,
@@ -541,20 +549,22 @@ const Menu = struct {
         }
     }
 
+    /// Draws the button and reports if it has been pressed by returning true. Otherwise the button
+    /// is drawn in its default state.
     fn drawButton(
         label: [:0]const u8,
-        button: struct { rl.Rectangle, rg.IconName },
+        button: Button,
     ) bool {
         _ = rg.label(
             rl.Rectangle{
-                .x = button[0].x,
+                .x = button.dimensions.x,
                 .y = 1,
-                .width = button[0].width,
-                .height = button[0].height,
+                .width = button.dimensions.width,
+                .height = button.dimensions.height,
             },
             label,
         );
-        return rg.button(button[0], rg.iconText(@intFromEnum(button[1]), ""));
+        return rg.button(button.dimensions, rg.iconText(@intFromEnum(button.icon), ""));
     }
 };
 
