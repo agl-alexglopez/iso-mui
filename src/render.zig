@@ -381,65 +381,54 @@ const Menu = struct {
         .{ "RDFS", rdfs.generate },
         .{ "Wilson's Adder", wilson.generate },
     };
+
+    /// The string Raylib needs to create the options in the generator drop down menu.
     const generator_options: [:0]const u8 = generator_table[0][0] ++ ";" ++ generator_table[1][0];
+    /// The solving algorithm options for Raylib drop down.
+    const solver_options: [:0]const u8 = "DFS;BFS";
+    /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
+    const direction_options: [:0]const u8 = "Forward;Reverse";
 
-    // Tuple selectors. Tuples in Zig are convenient for grouping together loose logic of similar
-    // but not identical types. The indexing syntax of tuples can be vague so these indices will
-    // help the reader understand what field of the tuple is being accessed.
-
-    /// The tuple field holding the rl.Rectangle dimensions of the box.
-    const dimension = 0;
-    /// The tuple field holding the active selection integer we can turn into an int.
-    const active = 1;
-    /// The tuple field determining if the drop down is editable.
-    const editmode = 2;
-
-    const dropdown_width = 100;
+    const dropdown_width = 150;
     const dropdown_height = 20;
     const label_height = 20;
     const x_padding = 20;
 
-    generator: struct {
-        rl.Rectangle,
-        i32,
-        bool,
-    } = .{
-        rl.Rectangle{
+    const Dropdown = struct {
+        dimensions: rl.Rectangle,
+        active: i32,
+        editmode: bool,
+    };
+
+    generator: Dropdown = .{
+        .dimensions = rl.Rectangle{
             .x = 0 + x_padding,
             .y = label_height,
             .width = dropdown_width,
             .height = dropdown_height,
         },
-        0,
-        false,
+        .active = 0,
+        .editmode = false,
     },
-    solver: struct {
-        rl.Rectangle,
-        i32,
-        bool,
-    } = .{
-        rl.Rectangle{
+    solver: Dropdown = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width) + x_padding,
             .y = label_height,
             .width = dropdown_width,
             .height = dropdown_height,
         },
-        0,
-        false,
+        .active = 0,
+        .editmode = false,
     },
-    dir: struct {
-        rl.Rectangle,
-        i32,
-        bool,
-    } = .{
-        rl.Rectangle{
+    dir: Dropdown = .{
+        .dimensions = rl.Rectangle{
             .x = (dropdown_width * 2) + x_padding,
             .y = label_height,
             .width = dropdown_width,
             .height = dropdown_height,
         },
-        0,
-        false,
+        .active = 0,
+        .editmode = false,
     },
     speed: f64 = default_animation_dt,
 
@@ -449,21 +438,33 @@ const Menu = struct {
     }
 
     fn drawMenu(self: *Menu) void {
+        drawDropdown("Generator:", Menu.generator_options, &self.generator);
+        drawDropdown("Solver:", Menu.solver_options, &self.solver);
+        drawDropdown("Direction:", Menu.direction_options, &self.dir);
+    }
+
+    fn drawDropdown(
+        label: [:0]const u8,
+        comptime options: [:0]const u8,
+        dropdown: *Dropdown,
+    ) void {
         _ = rg.label(
             rl.Rectangle{
-                .x = self.generator[dimension].x,
+                .x = dropdown.dimensions.x,
                 .y = 1,
-                .width = self.generator[dimension].width,
-                .height = self.generator[dimension].height,
+                .width = dropdown.dimensions.width,
+                .height = dropdown.dimensions.height,
             },
-            "Generator:",
+            label,
         );
-        _ = rg.dropdownBox(
-            self.generator[dimension],
-            Menu.generator_options,
-            &self.generator[active],
-            self.generator[editmode],
-        );
+        if (rg.dropdownBox(
+            dropdown.dimensions,
+            options,
+            &dropdown.active,
+            dropdown.editmode,
+        ) != 0) {
+            dropdown.editmode = !dropdown.editmode;
+        }
     }
 };
 
