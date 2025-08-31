@@ -106,7 +106,7 @@ pub const Render = struct {
     pub fn run(
         self: *Render,
     ) !void {
-        _ = try wilson.generate(&self.maze);
+        _ = try Menu.generator_table[0][1](&self.maze);
         const cur_tape: *maze.Tape = &self.maze.build_history;
         var algorithm_t: f64 = 0.0;
         var animation_t: f64 = 0.0;
@@ -418,6 +418,7 @@ const Menu = struct {
 
     const max_algorithm_dt = 1.0;
     const min_algorithm_dt = 0.001;
+    const default_dt = 0.3;
 
     const Dropdown = struct {
         dimensions: rl.Rectangle,
@@ -464,7 +465,7 @@ const Menu = struct {
         .dimensions = undefined,
         .icon = rg.IconName.arrow_up_fill,
     },
-    algorithm_dt: f64 = 0.5,
+    algorithm_dt: f64 = default_dt,
     direction: Direction = Direction.forward,
 
     /// Initializes the dimensions and styles that will be used for the menu at the top of the
@@ -544,6 +545,8 @@ const Menu = struct {
             // Restart maze with the specified dropdown options.
             m.clearRetainingDimensions();
             _ = try generator_table[@intCast(self.generator.active)][1](m);
+            self.direction = Direction.forward;
+            self.algorithm_dt = default_dt;
         }
         if (drawButton("Reverse:", self.reverse)) {
             self.direction = Direction.reverse;
