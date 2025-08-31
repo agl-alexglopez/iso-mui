@@ -88,7 +88,7 @@ pub const Render = struct {
                 .x = screen_width,
                 .y = screen_height,
             },
-            .menu = Menu.init(),
+            .menu = Menu.init(screen_width, screen_height),
         };
         return r;
     }
@@ -111,7 +111,6 @@ pub const Render = struct {
         var algorithm_t: f64 = 0.0;
         var animation_t: f64 = 0.0;
         const animation_dt: f64 = 0.195;
-        const algorithm_dt: f64 = 0.5;
         var cur_time: f64 = rl.getTime();
         var algorithm_accumulate: f64 = 0.0;
         var animation_accumulate: f64 = 0.0;
@@ -121,10 +120,13 @@ pub const Render = struct {
             cur_time = new_time;
             algorithm_accumulate += frame_time;
             animation_accumulate += frame_time;
-            while (algorithm_accumulate >= algorithm_dt) {
-                _ = nextMazeStep(&self.maze, cur_tape);
-                algorithm_t += algorithm_dt;
-                algorithm_accumulate -= algorithm_dt;
+            while (algorithm_accumulate >= self.menu.algorithm_dt) {
+                _ = switch (self.menu.direction) {
+                    .forward => nextMazeStep(&self.maze, cur_tape),
+                    .reverse => prevMazeStep(&self.maze, cur_tape),
+                };
+                algorithm_t += self.menu.algorithm_dt;
+                algorithm_accumulate -= self.menu.algorithm_dt;
             }
             while (animation_accumulate >= animation_dt) {
                 updateAnimations(&self.maze);
@@ -179,14 +181,24 @@ pub const Render = struct {
         m: *maze.Maze,
         t: *maze.Tape,
     ) bool {
-        if (t.i <= 0 or t.deltas.items[t.i - 1].burst > t.i) {
+        if (t.i == 0 or t.deltas.items[t.i - 1].burst > t.i) {
             return false;
         }
         var i: usize = t.i - 1;
-        const end = t.i - t.deltas.items[i].burst;
-        while (i > end) : (i -= 1) {
+        const end = blk: {
+            if (t.deltas.items[i].burst > t.i) {
+                break :blk 0;
+            } else {
+                break :blk t.i - t.deltas.items[i].burst;
+            }
+        };
+        while (true) {
             const d: maze.Delta = t.deltas.items[i];
-            m.getPtr(d.p.r, d.p.c).* = d.after;
+            m.getPtr(d.p.r, d.p.c).* = d.before;
+            if (i == 0 or i == end) {
+                break;
+            }
+            i -= 1;
         }
         t.i = end;
         return true;
@@ -241,6 +253,7 @@ pub const Render = struct {
             0.0,
             .ray_white,
         );
+        // Menu drawing should be done in real screen only.
         self.menu.drawMenu(&self.maze);
     }
 };
@@ -377,11 +390,13 @@ const Menu = struct {
         dfs = 0,
         bfs = 1,
     };
-    const default_animation_dt: f64 = 0.195;
 
     /// The generator table stores the functions available that we have imported. These can be
     /// selected via an enum as index.
-    const generator_table: [2]struct { [:0]const u8, *const fn (*maze.Maze) maze.MazeError!*maze.Maze } = .{
+    const generator_table: [2]struct {
+        [:0]const u8,
+        *const fn (*maze.Maze) maze.MazeError!*maze.Maze,
+    } = .{
         .{ "RDFS", rdfs.generate },
         .{ "Wilson's Adder", wilson.generate },
     };
@@ -393,13 +408,14 @@ const Menu = struct {
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
 
-    const dropdown_width = 200;
-    const playback_width = 200;
-    const dropdown_height = 20;
     const label_height = 20;
     const x_padding = 20;
+    const button_count = 8;
 
     const green_hex = 0x00FF00FF;
+
+    const max_algorithm_dt = 1.0;
+    const min_algorithm_dt = 0.001;
 
     const Dropdown = struct {
         dimensions: rl.Rectangle,
@@ -413,86 +429,102 @@ const Menu = struct {
     };
 
     generator: Dropdown = .{
-        .dimensions = rl.Rectangle{
-            .x = 0 + x_padding,
-            .y = label_height,
-            .width = dropdown_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .active = 0,
         .editmode = false,
     },
     solver: Dropdown = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width) + x_padding,
-            .y = label_height,
-            .width = dropdown_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .active = 0,
         .editmode = false,
     },
     start: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.filetype_video,
     },
     reverse: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + playback_width + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.player_previous,
     },
     pause: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + (playback_width * 2) + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.player_pause,
     },
     forward: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + (playback_width * 3) + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.player_next,
     },
     slower: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + (playback_width * 4) + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.arrow_down_fill,
     },
     faster: Button = .{
-        .dimensions = rl.Rectangle{
-            .x = (dropdown_width * 2) + (playback_width * 5) + x_padding,
-            .y = label_height,
-            .width = playback_width,
-            .height = dropdown_height,
-        },
+        .dimensions = undefined,
         .icon = rg.IconName.arrow_up_fill,
     },
-    speed: f64 = default_animation_dt,
+    algorithm_dt: f64 = 0.5,
+    direction: Direction = Direction.forward,
 
-    fn init() Menu {
+    /// Initializes the dimensions and styles that will be used for the menu at the top of the
+    /// screen. Buttons will control maze related options.
+    fn init(screen_width: i32, screen_height: i32) Menu {
+        _ = screen_height;
         rg.loadStyleDefault();
         rg.setStyle(.default, .{ .default = rg.DefaultProperty.text_size }, 20);
         rg.setStyle(.default, .{ .control = rg.ControlProperty.text_color_normal }, green_hex);
-        return Menu{};
+        // Buttons are spread evenly with some x padding on both sides so there is no edge clipping.
+        const button_width: f32 = @floatFromInt(@divTrunc(screen_width - (2 * x_padding), button_count));
+        const button_height = 20;
+        var ret = Menu{};
+        ret.generator.dimensions = rl.Rectangle{
+            .x = x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.solver.dimensions = rl.Rectangle{
+            .x = button_width + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.start.dimensions = rl.Rectangle{
+            .x = (button_width * 2) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.reverse.dimensions = rl.Rectangle{
+            .x = (button_width * 3) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.pause.dimensions = rl.Rectangle{
+            .x = (button_width * 4) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.forward.dimensions = rl.Rectangle{
+            .x = (button_width * 5) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.slower.dimensions = rl.Rectangle{
+            .x = (button_width * 6) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        ret.faster.dimensions = rl.Rectangle{
+            .x = (button_width * 7) + x_padding,
+            .y = label_height,
+            .width = button_width,
+            .height = button_height,
+        };
+        return ret;
     }
 
     /// Draws the menu elements and handles any menu interactions that require updating the maze.
@@ -511,19 +543,19 @@ const Menu = struct {
             // Restart maze with the specified dropdown options.
         }
         if (drawButton("Reverse:", self.reverse)) {
-            // change direction.
+            self.direction = Direction.reverse;
         }
         if (drawButton("Pause:", self.pause)) {
             // Stop algorithm
         }
         if (drawButton("Forward:", self.forward)) {
-            // change direction.
+            self.direction = Direction.forward;
         }
         if (drawButton("Slower:", self.slower)) {
-            // change speed.
+            self.algorithm_dt = @min(self.algorithm_dt * 2, max_algorithm_dt);
         }
         if (drawButton("Faster:", self.faster)) {
-            // change speed.
+            self.algorithm_dt = @max(self.algorithm_dt / 2, min_algorithm_dt);
         }
     }
 
