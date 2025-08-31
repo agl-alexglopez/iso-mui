@@ -167,6 +167,11 @@ pub const Tape = struct {
         self.* = undefined;
     }
 
+    fn clear(self: *Tape) void {
+        self.deltas.clearRetainingCapacity();
+        self.i = 0;
+    }
+
     /// Records the requested delta to the back of the tape. This may allocate and can fail.
     pub fn record(
         self: *Tape,
@@ -226,6 +231,17 @@ pub const Maze = struct {
         self.build_history.deinit();
         self.solve_history.deinit();
         self.* = undefined;
+    }
+
+    /// Clears the maze of any Square state and zeros all rows and columns. The build and solve
+    /// history are also cleared and reset to 0 while maintaining their capacity. This function
+    /// does not free any memory.
+    pub fn clearRetainingDimensions(self: *Maze) void {
+        for (self.maze.squares) |*s| {
+            s.* = 0;
+        }
+        self.build_history.clear();
+        self.solve_history.clear();
     }
 
     /// Return a copy of the Square at the desired row and column. Assumes the row and column access

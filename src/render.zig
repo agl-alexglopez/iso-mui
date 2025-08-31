@@ -124,6 +124,7 @@ pub const Render = struct {
                 _ = switch (self.menu.direction) {
                     .forward => nextMazeStep(&self.maze, cur_tape),
                     .reverse => prevMazeStep(&self.maze, cur_tape),
+                    .pause => false,
                 };
                 algorithm_t += self.menu.algorithm_dt;
                 algorithm_accumulate -= self.menu.algorithm_dt;
@@ -133,7 +134,7 @@ pub const Render = struct {
                 animation_t += animation_dt;
                 animation_accumulate -= animation_dt;
             }
-            self.render();
+            try self.render();
             // Note that if any new textures are loaded the old one must be unloaded here.
         }
     }
@@ -195,7 +196,7 @@ pub const Render = struct {
         while (true) {
             const d: maze.Delta = t.deltas.items[i];
             m.getPtr(d.p.r, d.p.c).* = d.before;
-            if (i == 0 or i == end) {
+            if (i == end) {
                 break;
             }
             i -= 1;
@@ -207,7 +208,7 @@ pub const Render = struct {
     /// Performs pass over maze rendering the current state given the status of the Square bits.
     fn render(
         self: *Render,
-    ) void {
+    ) !void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
         rl.beginTextureMode(self.virtual_screen);
         rl.clearBackground(.black);
@@ -254,7 +255,7 @@ pub const Render = struct {
             .ray_white,
         );
         // Menu drawing should be done in real screen only.
-        self.menu.drawMenu(&self.maze);
+        try self.menu.drawMenu(&self.maze);
     }
 };
 
@@ -380,6 +381,7 @@ const WallAtlas = struct {
 const Menu = struct {
     const Direction = enum {
         forward,
+        pause,
         reverse,
     };
     const Generator = enum(u32) {
@@ -534,19 +536,20 @@ const Menu = struct {
     fn drawMenu(
         self: *Menu,
         m: *maze.Maze,
-    ) void {
-        _ = m;
+    ) !void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
         // Restart forces us to act upon any changes in the drop down menus.
         if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
+            m.clearRetainingDimensions();
+            _ = try generator_table[@intCast(self.generator.active)][1](m);
         }
         if (drawButton("Reverse:", self.reverse)) {
             self.direction = Direction.reverse;
         }
         if (drawButton("Pause:", self.pause)) {
-            // Stop algorithm
+            self.direction = Direction.pause;
         }
         if (drawButton("Forward:", self.forward)) {
             self.direction = Direction.forward;
