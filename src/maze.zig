@@ -236,7 +236,7 @@ pub const Maze = struct {
     /// Clears the maze of any Square state and zeros all rows and columns. The build and solve
     /// history are also cleared and reset to 0 while maintaining their capacity. This function
     /// does not free any memory.
-    pub fn clearRetainingDimensions(self: *Maze) void {
+    pub fn clearRetainingCapacity(self: *Maze) void {
         for (self.maze.squares) |*s| {
             s.* = 0;
         }

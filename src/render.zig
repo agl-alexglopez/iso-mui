@@ -72,7 +72,6 @@ pub const Render = struct {
         comptime assert(WallAtlas.sprite_pixels.x >= 0 and WallAtlas.sprite_pixels.y >= 0);
         comptime assert(WallAtlas.wall_dimensions.x >= 0 and WallAtlas.wall_dimensions.y >= 0);
         rl.initWindow(screen_width, screen_height, "zig-zag-mui");
-        rg.loadStyle("style_cyber.h");
         rl.setTargetFPS(60);
         const cols: i32 = @intCast(@max(maze_cols, maze_rows));
         const rows: i32 = @intCast(@max(maze_cols, maze_rows));
@@ -135,10 +134,63 @@ pub const Render = struct {
                 animation_accumulate -= animation_dt;
             }
             try self.render();
-            // Note that if any new textures are loaded the old one must be unloaded here.
         }
     }
 
+    /// Performs pass over maze rendering the current state given the status of the Square bits.
+    fn render(
+        self: *Render,
+    ) !void {
+        // First, draw the maze as the user has specified to a pixel perfect virtual screen.
+        rl.beginTextureMode(self.virtual_screen);
+        rl.clearBackground(.black);
+        {
+            const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) -
+                @divTrunc(WallAtlas.sprite_pixels.x, 2);
+            const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
+            var r: i32 = 0;
+            while (r < self.maze.maze.rows) : (r += 1) {
+                var c: i32 = 0;
+                while (c < self.maze.maze.cols) : (c += 1) {
+                    self.atlas.drawMazeTexture(&self.maze, r, c, x_start, y_start);
+                }
+            }
+        }
+        rl.endTextureMode();
+
+        // Now actually draw to real screen and let raylib figure out the scaling.
+        rl.beginDrawing();
+        defer rl.endDrawing();
+        rl.clearBackground(.black);
+        rl.setTextureFilter(self.virtual_screen.texture, .point);
+        // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
+        const inverted_virtual_height: i32 = -self.virtual_screen.texture.height;
+        rl.drawTexturePro(
+            self.virtual_screen.texture,
+            rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(self.virtual_screen.texture.width),
+                .height = @floatFromInt(inverted_virtual_height),
+            },
+            rl.Rectangle{
+                .x = 0,
+                .y = 0,
+                .width = @floatFromInt(self.real_screen_dimensions.x),
+                .height = @floatFromInt(self.real_screen_dimensions.y),
+            },
+            rl.Vector2{
+                .x = 0,
+                .y = 0,
+            },
+            0.0,
+            .ray_white,
+        );
+        // Menu drawing should be done in real screen only.
+        try self.menu.drawMenu(&self.maze);
+    }
+
+    /// Progresses the animation frame of wall squares.
     fn updateAnimations(m: *maze.Maze) void {
         var r: i32 = 0;
         const sync_frame: i32 = @intCast((m.get(0, 0) & WallAtlas.animation_mask) >>
@@ -203,59 +255,6 @@ pub const Render = struct {
         }
         t.i = end;
         return true;
-    }
-
-    /// Performs pass over maze rendering the current state given the status of the Square bits.
-    fn render(
-        self: *Render,
-    ) !void {
-        // First, draw the maze as the user has specified to a pixel perfect virtual screen.
-        rl.beginTextureMode(self.virtual_screen);
-        rl.clearBackground(.black);
-        {
-            const x_start: i32 = @divTrunc(self.virtual_screen.texture.width, 2) -
-                @divTrunc(WallAtlas.sprite_pixels.x, 2);
-            const y_start: i32 = @divTrunc(self.virtual_screen.texture.height, 8);
-            var r: i32 = 0;
-            while (r < self.maze.maze.rows) : (r += 1) {
-                var c: i32 = 0;
-                while (c < self.maze.maze.cols) : (c += 1) {
-                    self.atlas.drawMazeTexture(&self.maze, r, c, x_start, y_start);
-                }
-            }
-        }
-        rl.endTextureMode();
-
-        // Now actually draw to real screen and let raylib figure out the scaling.
-        rl.beginDrawing();
-        defer rl.endDrawing();
-        rl.clearBackground(.black);
-        rl.setTextureFilter(self.virtual_screen.texture, .point);
-        // Don't forget to flip the virtual screen source due to OpenGL buffer quirk.
-        const inverted_virtual_height: i32 = -self.virtual_screen.texture.height;
-        rl.drawTexturePro(
-            self.virtual_screen.texture,
-            rl.Rectangle{
-                .x = 0,
-                .y = 0,
-                .width = @floatFromInt(self.virtual_screen.texture.width),
-                .height = @floatFromInt(inverted_virtual_height),
-            },
-            rl.Rectangle{
-                .x = 0,
-                .y = 0,
-                .width = @floatFromInt(self.real_screen_dimensions.x),
-                .height = @floatFromInt(self.real_screen_dimensions.y),
-            },
-            rl.Vector2{
-                .x = 0,
-                .y = 0,
-            },
-            0.0,
-            .ray_white,
-        );
-        // Menu drawing should be done in real screen only.
-        try self.menu.drawMenu(&self.maze);
     }
 };
 
@@ -375,22 +374,25 @@ const WallAtlas = struct {
 };
 
 /// The Menu displays various controls at the top of the screen while allowing the user to interact
-/// with the maze. The user can select algorithms, speeds, and directions that the algorithms run.
+/// with the maze. The user can select algorithms, speeds, and directions for the algorithm to run.
 /// Therefore, the Menu module is responsible for drawing but may mutate the maze as requested by
-/// the user.
+/// the user, especially when a newly requested maze type must be loaded in.
 const Menu = struct {
     const Direction = enum {
         forward,
         pause,
         reverse,
     };
-    const Generator = enum(u32) {
-        rdfs = 0,
-        wilson_adder = 1,
+
+    const Dropdown = struct {
+        dimensions: rl.Rectangle,
+        active: i32,
+        editmode: bool,
     };
-    const Solver = enum(u32) {
-        dfs = 0,
-        bfs = 1,
+
+    const Button = struct {
+        dimensions: rl.Rectangle,
+        icon: rg.IconName,
     };
 
     /// The generator table stores the functions available that we have imported. These can be
@@ -409,27 +411,16 @@ const Menu = struct {
     const solver_options: [:0]const u8 = "DFS;BFS";
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
-
+    /// The height of the space for text above each button.
     const label_height = 20;
+    /// X direction padding to left and right of menu buttons so no cutoff.
     const x_padding = 20;
+    ///
     const button_count = 8;
-
     const green_hex = 0x00FF00FF;
-
     const max_algorithm_dt = 1.0;
     const min_algorithm_dt = 0.001;
     const default_dt = 0.3;
-
-    const Dropdown = struct {
-        dimensions: rl.Rectangle,
-        active: i32,
-        editmode: bool,
-    };
-
-    const Button = struct {
-        dimensions: rl.Rectangle,
-        icon: rg.IconName,
-    };
 
     generator: Dropdown = .{
         .dimensions = undefined,
@@ -476,7 +467,12 @@ const Menu = struct {
         rg.setStyle(.default, .{ .default = rg.DefaultProperty.text_size }, 20);
         rg.setStyle(.default, .{ .control = rg.ControlProperty.text_color_normal }, green_hex);
         // Buttons are spread evenly with some x padding on both sides so there is no edge clipping.
-        const button_width: f32 = @floatFromInt(@divTrunc(screen_width - (2 * x_padding), button_count));
+        const button_width: f32 = @floatFromInt(
+            @divTrunc(
+                screen_width - (2 * x_padding),
+                button_count,
+            ),
+        );
         const button_height = 20;
         var ret = Menu{};
         ret.generator.dimensions = rl.Rectangle{
@@ -543,7 +539,7 @@ const Menu = struct {
         // Restart forces us to act upon any changes in the drop down menus.
         if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
-            m.clearRetainingDimensions();
+            m.clearRetainingCapacity();
             _ = try generator_table[@intCast(self.generator.active)][1](m);
             self.direction = Direction.forward;
             self.algorithm_dt = default_dt;
