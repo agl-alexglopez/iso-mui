@@ -35,8 +35,8 @@ const rg = @import("raygui");
 const maze = @import("maze.zig");
 // The maze generator module for maze building related helpers and logic.
 const gen = @import("generator.zig");
-const rdfs = @import("builders/rdfs.zig");
-const wilson = @import("builders/wilson_adder.zig");
+const rdfs = @import("generators/rdfs.zig");
+const wilson = @import("generators/wilson_adder.zig");
 
 // Solvers
 const sol = @import("solve.zig");

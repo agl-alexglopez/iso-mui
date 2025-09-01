@@ -2,11 +2,6 @@
 const std = @import("std");
 // Rendering pipeline module.
 const render = @import("render.zig");
-// Maze stuff.
-const maze = @import("maze.zig");
-const rdfs = @import("builders/rdfs.zig");
-const wilson = @import("builders/wilson_adder.zig");
-const gen = @import("generator.zig");
 
 /// Argument parsing helper.
 const Args = struct {
