@@ -15,8 +15,6 @@ const Queue = struct {
     len: usize,
 };
 
-const bfs_burst = 4;
-
 pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
     var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
     var parents = std.AutoArrayHashMap(maze.Point, maze.Point).init(allocator);
@@ -32,10 +30,14 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
                 .p = cur.point,
                 .before = square,
                 .after = square | sol.thread_paints[0],
-                .burst = bfs_burst,
+                .burst = 1,
             });
             m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
             var prev = parents.get(cur.point) orelse return maze.MazeError.LogicFail;
+            // For now the winning solver will just paint the bright finish block color all the
+            // way back to the start. However, if we were to implement multiple solver threads
+            // with their own colors, we should just record this winning path in auxiliary storage
+            // and then paint this path the color of the winner when all threads finish.
             while (prev.r > 0) {
                 const s = m.get(prev.r, prev.c);
                 try m.solve_history.record(maze.Delta{
@@ -53,7 +55,7 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
             .p = cur.point,
             .before = square,
             .after = square | sol.thread_paints[0],
-            .burst = bfs_burst,
+            .burst = 1,
         });
         m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
         for (maze.cardinal_directions) |p| {

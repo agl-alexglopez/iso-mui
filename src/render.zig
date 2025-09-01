@@ -124,25 +124,26 @@ pub const Render = struct {
                 animation_accumulate -= animation_dt;
             }
             while (algorithm_accumulate >= self.menu.algorithm_dt) {
-                _ = switch (self.menu.direction) {
-                    .forward => {
-                        if (!nextMazeStep(&self.maze, cur_tape) and
-                            cur_tape == &self.maze.build_history)
-                        {
-                            cur_tape = &self.maze.solve_history;
-                            _ = nextMazeStep(&self.maze, cur_tape);
-                        }
-                    },
-                    .reverse => {
-                        if (!prevMazeStep(&self.maze, cur_tape) and
-                            cur_tape == &self.maze.solve_history)
-                        {
-                            cur_tape = &self.maze.build_history;
-                            _ = prevMazeStep(&self.maze, cur_tape);
-                        }
-                    },
-                    .pause => false,
-                };
+                if (self.menu.play_pause == Menu.PlayPause.play) {
+                    _ = switch (self.menu.direction) {
+                        .forward => {
+                            if (!nextMazeStep(&self.maze, cur_tape) and
+                                cur_tape == &self.maze.build_history)
+                            {
+                                cur_tape = &self.maze.solve_history;
+                                _ = nextMazeStep(&self.maze, cur_tape);
+                            }
+                        },
+                        .reverse => {
+                            if (!prevMazeStep(&self.maze, cur_tape) and
+                                cur_tape == &self.maze.solve_history)
+                            {
+                                cur_tape = &self.maze.build_history;
+                                _ = prevMazeStep(&self.maze, cur_tape);
+                            }
+                        },
+                    };
+                }
                 algorithm_t += self.menu.algorithm_dt;
                 algorithm_accumulate -= self.menu.algorithm_dt;
             }
@@ -500,8 +501,12 @@ const WallAtlas = struct {
 const Menu = struct {
     const Direction = enum {
         forward,
-        pause,
         reverse,
+    };
+
+    const PlayPause = enum {
+        play,
+        pause,
     };
 
     const Dropdown = struct {
@@ -586,6 +591,7 @@ const Menu = struct {
     },
     algorithm_dt: f64 = default_dt,
     direction: Direction = Direction.forward,
+    play_pause: PlayPause = PlayPause.play,
 
     /// Initializes the dimensions and styles that will be used for the menu at the top of the
     /// screen. Buttons will control maze related options.
@@ -681,7 +687,10 @@ const Menu = struct {
             self.direction = Direction.reverse;
         }
         if (drawButton("Pause:", self.pause)) {
-            self.direction = Direction.pause;
+            self.play_pause = switch (self.play_pause) {
+                Menu.PlayPause.play => Menu.PlayPause.pause,
+                Menu.PlayPause.pause => Menu.PlayPause.play,
+            };
         }
         if (drawButton("Forward:", self.forward)) {
             self.direction = Direction.forward;
