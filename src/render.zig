@@ -105,7 +105,7 @@ pub const Render = struct {
     pub fn run(
         self: *Render,
     ) !void {
-        _ = try Menu.generator_table[0][1](&self.maze);
+        _ = try Menu.generator_table[0][1](&self.maze, self.allocator);
         const cur_tape: *maze.Tape = &self.maze.build_history;
         var algorithm_t: f64 = 0.0;
         var animation_t: f64 = 0.0;
@@ -187,7 +187,7 @@ pub const Render = struct {
             .ray_white,
         );
         // Menu drawing should be done in real screen only.
-        try self.menu.drawMenu(&self.maze);
+        try self.menu.drawMenu(&self.maze, self.allocator);
     }
 
     /// Progresses the animation frame of wall squares.
@@ -399,7 +399,7 @@ const Menu = struct {
     /// selected via an enum as index.
     const generator_table: [2]struct {
         [:0]const u8,
-        *const fn (*maze.Maze) maze.MazeError!*maze.Maze,
+        *const fn (*maze.Maze, std.mem.Allocator) maze.MazeError!*maze.Maze,
     } = .{
         .{ "RDFS", rdfs.generate },
         .{ "Wilson's Adder", wilson.generate },
@@ -533,6 +533,7 @@ const Menu = struct {
     fn drawMenu(
         self: *Menu,
         m: *maze.Maze,
+        allocator: std.mem.Allocator,
     ) !void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
@@ -540,7 +541,7 @@ const Menu = struct {
         if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
             m.clearRetainingCapacity();
-            _ = try generator_table[@intCast(self.generator.active)][1](m);
+            _ = try generator_table[@intCast(self.generator.active)][1](m, allocator);
             self.direction = Direction.forward;
             self.algorithm_dt = default_dt;
         }

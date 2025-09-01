@@ -16,7 +16,10 @@ const maze = @import("../maze.zig");
 /// Because the building of the maze is recorded in the maze build history, allocation may fail.
 pub fn generate(
     m: *maze.Maze,
+    allocator: std.mem.Allocator,
 ) maze.MazeError!*maze.Maze {
+    // Randomized depth first search needs no auxiliary memory.
+    _ = allocator;
     try gen.fillMazeWithWalls(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();

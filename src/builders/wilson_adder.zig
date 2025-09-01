@@ -37,7 +37,10 @@ const RandomWalk = struct {
 /// connecting walls and there is a perimeter of complete walls around the maze.
 pub fn generate(
     m: *maze.Maze,
+    allocator: std.mem.Allocator,
 ) maze.MazeError!*maze.Maze {
+    // Wilson's algorithm needs no auxiliary memory.
+    _ = allocator;
     try gen.buildWallPerimeter(m);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
