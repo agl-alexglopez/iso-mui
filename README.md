@@ -35,4 +35,8 @@ zig build run -- -r=20 -c=20 -w=720 -h=720
 
 Because the maze is drawn in isometric pixel art, the provided maze row and column dimensions are automatically adjusted to be `NxN` where `N` is the larger of the arguments provided.
 
+## Why
 
+This is a "[Rosetta Stone](https://agl-alexglopez.github.io/2025/08/01/rosetta-stones-and-mazes-the-premise.html)" program that helped me learn the Zig programming language. For more on what a "[Rosetta Stone](https://agl-alexglopez.github.io/2025/08/01/rosetta-stones-and-mazes-the-premise.html)" program is, and how you can create something similar, visit my [blog](https://agl-alexglopez.github.io/).
+
+There are more features that can be added in the future. Notably, there is a large number of maze generator algorithms I am aware of but have not implemented yet. Also, the solvers can be multi-threaded to further explore Zig's concurrency primitives. Keep an eye out for these updates, if interested.
