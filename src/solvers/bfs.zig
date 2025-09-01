@@ -19,6 +19,7 @@ const Queue = struct {
             const handle = self.list.popFirst() orelse return;
             const elem: *QueueElem = @fieldParentPtr("e", handle);
             allocator.destroy(elem);
+            self.len -= 1;
         }
     }
 
