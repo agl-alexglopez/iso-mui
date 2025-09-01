@@ -6,6 +6,8 @@ This project aims to display mazes in various ways that allow the user to use an
 
 Zig is not yet version 1.0 so this project will likely break in the future. Right now it is on Zig version `0.15.1`. 
 
+This project also uses [raylib-zig](https://github.com/raylib-zig/raylib-zig) which is also tagged to this Zig version.
+
 ## Usage
 
 This program lets you observe maze building and solving algorithms. Upon startup an arbitrary algorithm is playing.

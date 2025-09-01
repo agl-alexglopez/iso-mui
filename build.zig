@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const exe = b.addExecutable(.{
-        .name = "zig-zag-mui",
+        .name = "iso_mui",
         .root_module = exe_mod,
     });
 
@@ -35,10 +35,10 @@ pub fn build(b: *std.Build) void {
 
     // LSP convenience helpers
     const exe_check = b.addExecutable(.{
-        .name = "zig-zag-mui",
+        .name = "iso-mui",
         .root_module = exe_mod,
     });
-    const check = b.step("check", "Check if zig-zag-mui compiles");
+    const check = b.step("check", "Check if iso-mui compiles");
     check.dependOn(&exe_check.step);
 
     // Add a run step for shorter command line use.
@@ -46,6 +46,6 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         exe_run.addArgs(args);
     }
-    const run = b.step("run", "Run zig-zag-mui");
+    const run = b.step("run", "Run iso-mui");
     run.dependOn(&exe_run.step);
 }
