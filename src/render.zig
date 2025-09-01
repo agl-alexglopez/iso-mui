@@ -61,8 +61,8 @@ pub const Render = struct {
     /// Initialize the render context.
     pub fn init(
         allocator: std.mem.Allocator,
-        maze_rows: isize,
-        maze_cols: isize,
+        maze_rows: i32,
+        maze_cols: i32,
         screen_width: i32,
         screen_height: i32,
     ) !Render {
@@ -70,8 +70,8 @@ pub const Render = struct {
         comptime assert(WallAtlas.wall_dimensions.x >= 0 and WallAtlas.wall_dimensions.y >= 0);
         rl.initWindow(screen_width, screen_height, "zig-zag-mui");
         rl.setTargetFPS(60);
-        const cols: i32 = @intCast(@max(maze_cols, maze_rows));
-        const rows: i32 = @intCast(@max(maze_cols, maze_rows));
+        const cols: i32 = @max(maze_cols, maze_rows);
+        const rows: i32 = cols;
         const r = Render{
             .allocator = allocator,
             .maze = try maze.Maze.init(allocator, rows, cols),
