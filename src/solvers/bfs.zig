@@ -5,11 +5,15 @@ const std = @import("std");
 const maze = @import("../maze.zig");
 const sol = @import("../solve.zig");
 
+/// Element on which the doubly linked list can intrude.
 const QueueElem = struct {
     e: std.DoublyLinkedList.Node = .{},
     point: maze.Point,
 };
 
+/// This should be flat DEQ, but I guess Zig has removed most of these from their std offerings.
+/// I should make my own because a linked list is a worse version but I don't feel like implementing
+/// a DEQ right now and it's a good exercise to see how Zig does intrusive stuff.
 const Queue = struct {
     list: std.DoublyLinkedList,
     len: usize,
@@ -40,6 +44,8 @@ const Queue = struct {
     }
 };
 
+/// Solves a maze with a breadth first search. Visually this is distinct from a depth first search
+/// because the colored blocks will expand in a different section of the map on each step.
 pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
     var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
     var parents = std.AutoArrayHashMap(maze.Point, maze.Point).init(allocator);
@@ -98,6 +104,7 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
     return m;
 }
 
+/// Puts the requested key and value in the hash map or returns an allocation failure.
 fn put(
     map: *std.AutoArrayHashMap(maze.Point, maze.Point),
     k: maze.Point,
