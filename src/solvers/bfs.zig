@@ -13,17 +13,45 @@ const QueueElem = struct {
 const Queue = struct {
     list: std.DoublyLinkedList,
     len: usize,
+
+    pub fn deinit(self: *Queue, allocator: std.mem.Allocator) void {
+        while (self.len != 0) {
+            const handle = self.list.popFirst() orelse return;
+            const elem: *QueueElem = @fieldParentPtr("e", handle);
+            allocator.destroy(elem);
+        }
+    }
+
+    pub fn queue(self: *Queue, p: maze.Point, allocator: std.mem.Allocator) maze.MazeError!void {
+        var node: *QueueElem = allocator.create(QueueElem) catch return maze.MazeError.AllocFail;
+        node.point = p;
+        self.list.append(&node.e);
+        self.len += 1;
+    }
+
+    fn dequeue(self: *Queue) maze.MazeError!*QueueElem {
+        const handle: ?*std.DoublyLinkedList.Node = self.list.popFirst();
+        if (handle) |h| {
+            self.len -= 1;
+            return @fieldParentPtr("e", h);
+        }
+        return maze.MazeError.AllocFail;
+    }
 };
 
 pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
     var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
     var parents = std.AutoArrayHashMap(maze.Point, maze.Point).init(allocator);
-    defer parents.deinit();
+    defer {
+        parents.deinit();
+        bfs.deinit(allocator);
+    }
     const start: maze.Point = try sol.setStartAndFinish(m);
     try put(&parents, start, .{ .r = -1, .c = -1 });
-    try queue(&bfs, start, allocator);
+    try bfs.queue(start, allocator);
     while (bfs.len != 0) {
-        const cur: *QueueElem = try dequeue(&bfs);
+        const cur: *QueueElem = try bfs.dequeue();
+        defer allocator.destroy(cur);
         const square: maze.Square = m.get(cur.point.r, cur.point.c);
         if (sol.isFinish(square)) {
             try m.solve_history.record(maze.Delta{
@@ -62,31 +90,11 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
             const next = maze.Point{ .r = cur.point.r + p.r, .c = cur.point.c + p.c };
             if (m.isPath(next.r, next.c) and !parents.contains(next)) {
                 try put(&parents, next, cur.point);
-                try queue(&bfs, next, allocator);
+                try bfs.queue(next, allocator);
             }
         }
     }
     return m;
-}
-
-fn queue(
-    q: *Queue,
-    p: maze.Point,
-    allocator: std.mem.Allocator,
-) maze.MazeError!void {
-    var node: *QueueElem = allocator.create(QueueElem) catch return maze.MazeError.AllocFail;
-    node.point = p;
-    q.list.append(&node.e);
-    q.len += 1;
-}
-
-fn dequeue(q: *Queue) maze.MazeError!*QueueElem {
-    const handle: ?*std.DoublyLinkedList.Node = q.list.popFirst();
-    if (handle) |h| {
-        q.len -= 1;
-        return @fieldParentPtr("e", h);
-    }
-    return maze.MazeError.AllocFail;
 }
 
 fn put(
