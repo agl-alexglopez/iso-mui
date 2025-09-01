@@ -1,0 +1,96 @@
+//! This file implements a breadth first search to solve a randomly generated maze starting at a
+//! random start point and ending at a random finish point within maze boundaries.
+const std = @import("std");
+
+const maze = @import("../maze.zig");
+const sol = @import("../solve.zig");
+
+const QueueElem = struct {
+    e: std.DoublyLinkedList.Node = .{},
+    point: maze.Point,
+};
+
+const Queue = struct {
+    list: std.DoublyLinkedList,
+    len: usize,
+};
+
+const bfs_burst = 4;
+
+pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
+    var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
+    var parents = std.AutoArrayHashMap(maze.Point, maze.Point).init(allocator);
+    defer parents.deinit();
+    const start: maze.Point = try sol.setStartAndFinish(m);
+    try put(&parents, start, .{ .r = -1, .c = -1 });
+    try queue(&bfs, start, allocator);
+    while (bfs.len != 0) {
+        const cur: *QueueElem = try dequeue(&bfs);
+        const square: maze.Square = m.get(cur.point.r, cur.point.c);
+        if (sol.isFinish(square)) {
+            try m.solve_history.record(maze.Delta{
+                .p = cur.point,
+                .before = square,
+                .after = square | sol.thread_paints[0],
+                .burst = bfs_burst,
+            });
+            m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
+            var prev = parents.get(cur.point) orelse return maze.MazeError.LogicFail;
+            while (prev.r > 0) {
+                const s = m.get(prev.r, prev.c);
+                try m.solve_history.record(maze.Delta{
+                    .p = prev,
+                    .before = s,
+                    .after = s | sol.finish_bit,
+                    .burst = 1,
+                });
+                m.getPtr(prev.r, prev.c).* |= sol.finish_bit;
+                prev = parents.get(prev) orelse return maze.MazeError.LogicFail;
+            }
+            return m;
+        }
+        try m.solve_history.record(maze.Delta{
+            .p = cur.point,
+            .before = square,
+            .after = square | sol.thread_paints[0],
+            .burst = bfs_burst,
+        });
+        m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
+        for (maze.cardinal_directions) |p| {
+            const next = maze.Point{ .r = cur.point.r + p.r, .c = cur.point.c + p.c };
+            if (m.isPath(next.r, next.c) and !parents.contains(next)) {
+                try put(&parents, next, cur.point);
+                try queue(&bfs, next, allocator);
+            }
+        }
+    }
+    return m;
+}
+
+fn queue(
+    q: *Queue,
+    p: maze.Point,
+    allocator: std.mem.Allocator,
+) maze.MazeError!void {
+    var node: *QueueElem = allocator.create(QueueElem) catch return maze.MazeError.AllocFail;
+    node.point = p;
+    q.list.append(&node.e);
+    q.len += 1;
+}
+
+fn dequeue(q: *Queue) maze.MazeError!*QueueElem {
+    const handle: ?*std.DoublyLinkedList.Node = q.list.popFirst();
+    if (handle) |h| {
+        q.len -= 1;
+        return @fieldParentPtr("e", h);
+    }
+    return maze.MazeError.AllocFail;
+}
+
+fn put(
+    map: *std.AutoArrayHashMap(maze.Point, maze.Point),
+    k: maze.Point,
+    v: maze.Point,
+) maze.MazeError!void {
+    _ = map.put(k, v) catch return maze.MazeError.AllocFail;
+}

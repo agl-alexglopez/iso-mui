@@ -287,6 +287,13 @@ pub const Maze = struct {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
         return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) != 0;
     }
+
+    /// Zeros all the squares in the maze so a Tape can be played back.
+    pub fn zeroSquares(self: *Maze) void {
+        for (self.maze.squares) |*s| {
+            s.* = 0b0;
+        }
+    }
 };
 
 /////////////////////////////////////    Module Functions    //////////////////////////////////////

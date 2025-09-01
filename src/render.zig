@@ -38,15 +38,12 @@ const gen = @import("generator.zig");
 const rdfs = @import("builders/rdfs.zig");
 const wilson = @import("builders/wilson_adder.zig");
 
-////////////////////////////////////////  Constants   /////////////////////////////////////////////
+// Solvers
+const sol = @import("solve.zig");
+const dfs = @import("solvers/dfs.zig");
+const bfs = @import("solvers/bfs.zig");
 
-/// We will place any texture atlas for any wall styles we want in an asset folder. This is where
-/// we should also find solver animations (torch light, explorers, who knows).
-const asset_path: [:0]const u8 = "assets/";
-/// Walls can be efficiently stored and displayed in a 4x4 grid, aka a tile map or tile atlas.
-const atlas_folder: [:0]const u8 = "atlas/";
-/// Backtracking is the same texture no matter the style so leave it here.
-const backtracking_texture_atlas: [:0]const u8 = "atlas_maze_walls_backtrack.png";
+////////////////////////////////////////  Constants   /////////////////////////////////////////////
 
 ////////////////////////////////////////    Types    //////////////////////////////////////////////
 
@@ -106,7 +103,9 @@ pub const Render = struct {
         self: *Render,
     ) !void {
         _ = try Menu.generator_table[0][1](&self.maze, self.allocator);
-        const cur_tape: *maze.Tape = &self.maze.build_history;
+        _ = try Menu.solver_table[0][1](&self.maze, self.allocator);
+        self.maze.zeroSquares();
+        var cur_tape: *maze.Tape = &self.maze.build_history;
         var algorithm_t: f64 = 0.0;
         var animation_t: f64 = 0.0;
         const animation_dt: f64 = 0.195;
@@ -119,27 +118,42 @@ pub const Render = struct {
             cur_time = new_time;
             algorithm_accumulate += frame_time;
             animation_accumulate += frame_time;
-            while (algorithm_accumulate >= self.menu.algorithm_dt) {
-                _ = switch (self.menu.direction) {
-                    .forward => nextMazeStep(&self.maze, cur_tape),
-                    .reverse => prevMazeStep(&self.maze, cur_tape),
-                    .pause => false,
-                };
-                algorithm_t += self.menu.algorithm_dt;
-                algorithm_accumulate -= self.menu.algorithm_dt;
-            }
             while (animation_accumulate >= animation_dt) {
                 updateAnimations(&self.maze);
                 animation_t += animation_dt;
                 animation_accumulate -= animation_dt;
             }
-            try self.render();
+            while (algorithm_accumulate >= self.menu.algorithm_dt) {
+                _ = switch (self.menu.direction) {
+                    .forward => {
+                        if (!nextMazeStep(&self.maze, cur_tape) and
+                            cur_tape == &self.maze.build_history)
+                        {
+                            cur_tape = &self.maze.solve_history;
+                            _ = nextMazeStep(&self.maze, cur_tape);
+                        }
+                    },
+                    .reverse => {
+                        if (!prevMazeStep(&self.maze, cur_tape) and
+                            cur_tape == &self.maze.solve_history)
+                        {
+                            cur_tape = &self.maze.build_history;
+                            _ = prevMazeStep(&self.maze, cur_tape);
+                        }
+                    },
+                    .pause => false,
+                };
+                algorithm_t += self.menu.algorithm_dt;
+                algorithm_accumulate -= self.menu.algorithm_dt;
+            }
+            try self.render(&cur_tape);
         }
     }
 
     /// Performs pass over maze rendering the current state given the status of the Square bits.
     fn render(
         self: *Render,
+        cur_tape: **maze.Tape,
     ) !void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
         rl.beginTextureMode(self.virtual_screen);
@@ -152,7 +166,11 @@ pub const Render = struct {
             while (r < self.maze.maze.rows) : (r += 1) {
                 var c: i32 = 0;
                 while (c < self.maze.maze.cols) : (c += 1) {
-                    self.atlas.drawMazeTexture(&self.maze, r, c, x_start, y_start);
+                    if (cur_tape.* == &self.maze.build_history) {
+                        self.atlas.drawGeneratorTexture(&self.maze, r, c, x_start, y_start);
+                    } else {
+                        self.atlas.drawSolverTexture(&self.maze, r, c, x_start, y_start);
+                    }
                 }
             }
         }
@@ -187,7 +205,7 @@ pub const Render = struct {
             .ray_white,
         );
         // Menu drawing should be done in real screen only.
-        try self.menu.drawMenu(&self.maze, self.allocator);
+        try self.menu.drawMenu(&self.maze, cur_tape, self.allocator);
     }
 
     /// Progresses the animation frame of wall squares.
@@ -219,12 +237,13 @@ pub const Render = struct {
         if (t.i >= t.deltas.items.len) {
             return false;
         }
-        const end = t.deltas.items[t.i].burst;
-        for (t.i..t.i + end) |i| {
+        const burst = t.deltas.items[t.i].burst;
+        const end = @min(t.deltas.items.len, t.i + burst);
+        for (t.i..end) |i| {
             const d: maze.Delta = t.deltas.items[i];
             m.getPtr(d.p.r, d.p.c).* = d.after;
         }
-        t.i += @max(end, 1);
+        t.i = end;
         return true;
     }
 
@@ -271,6 +290,15 @@ pub const Render = struct {
 /// pixel art style. Any sprite sheets added for wall atlases must draw squares in a 2:1 width to
 /// height ratio within a square.
 const WallAtlas = struct {
+    /// We will place any texture atlas for any wall styles we want in an asset folder. This is
+    /// where we should also find solver animations.
+    const asset_path: [:0]const u8 = "assets/";
+    /// Walls can be efficiently stored and displayed in a 4x4 grid, aka a tile map or tile atlas.
+    const atlas_folder: [:0]const u8 = "atlas/";
+    /// Backtracking is the same texture no matter the style so leave it here.
+    const backtracking_texture_atlas: [:0]const u8 = "atlas_maze_walls_backtrack.png";
+    /// The white solve block that will take tint. A simple 32x32 pixel block.
+    const solve_block: [:0]const u8 = "solve_block.png";
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = asset_path ++ atlas_folder;
     /// The total area of the texture atlas grid in pixels.
@@ -287,6 +315,8 @@ const WallAtlas = struct {
     wall_texture: rl.Texture2D,
     /// Texture used to aid in visual representation of backtracking during building.
     backtrack_texture: rl.Texture2D,
+    /// The blank white block we can tint with rgb colors according to threads.
+    solve_texture: rl.Texture2D,
 
     /// Initialize the wall texture atlas by loading its files with Raylib.
     pub fn init(comptime file_name: [:0]const u8) !WallAtlas {
@@ -296,17 +326,20 @@ const WallAtlas = struct {
             .backtrack_texture = try rl.Texture2D.init(
                 WallAtlas.path ++ backtracking_texture_atlas,
             ),
+            .solve_texture = try rl.Texture2D.init(WallAtlas.path ++ solve_block),
         };
     }
 
     pub fn deinit(self: *WallAtlas) void {
         rl.unloadTexture(self.wall_texture);
         rl.unloadTexture(self.backtrack_texture);
+        rl.unloadTexture(self.solve_texture);
     }
 
-    /// Given a square returns the texture and pixel (x, y) coordinates on that texture that should
-    /// be rendered as the source rectangle.
-    fn drawMazeTexture(
+    /// Draws the appropriate maze square to the screen based on the values of the square bits.
+    /// Maze generators can use various tricks to make the display more interesting and we pick
+    /// up on those here.
+    fn drawGeneratorTexture(
         self: *const WallAtlas,
         m: *const maze.Maze,
         r: i32,
@@ -371,6 +404,93 @@ const WallAtlas = struct {
             .ray_white,
         );
     }
+
+    /// Draws the appropriate maze square to the screen based on the values of the square bits.
+    /// Solvers are focused on colors for displaying the paths.
+    fn drawSolverTexture(
+        self: *const WallAtlas,
+        m: *const maze.Maze,
+        r: i32,
+        c: i32,
+        x_start: i32,
+        y_start: i32,
+    ) void {
+        const square_bits: maze.Square = m.get(r, c);
+        const isometric_x: i32 = x_start + ((c - r) *
+            @divTrunc(WallAtlas.sprite_pixels.x, 2));
+        const isometric_y: i32 = y_start + ((c + r) *
+            @divTrunc(WallAtlas.sprite_pixels.y, 4));
+        const texture_src: struct { rl.Texture2D, rl.Rectangle, rl.Color } = choosing_src: {
+            if (sol.isStartOrFinish(square_bits)) {
+                break :choosing_src .{
+                    self.solve_texture,
+                    rl.Rectangle{
+                        .x = 0.0,
+                        .y = 0.0,
+                        .width = @floatFromInt(WallAtlas.sprite_pixels.x),
+                        .height = @floatFromInt(WallAtlas.sprite_pixels.y),
+                    },
+                    rl.Color{
+                        .r = 0,
+                        .g = 255,
+                        .b = 255,
+                        .a = 255,
+                    },
+                };
+            }
+            if (maze.isPath(square_bits)) {
+                const rgb: struct { u8, u8, u8 } = sol.getPaint(square_bits);
+                var color: rl.Color = .ray_white;
+                var texture = self.wall_texture;
+                if (rgb[0] != 0 or rgb[1] != 0 or rgb[2] != 0) {
+                    texture = self.solve_texture;
+                    color = rl.Color{
+                        .r = rgb[0],
+                        .g = rgb[1],
+                        .b = rgb[2],
+                        .a = 255,
+                    };
+                }
+                break :choosing_src .{
+                    texture,
+                    rl.Rectangle{
+                        .x = 0.0,
+                        .y = 0.0,
+                        .width = @floatFromInt(WallAtlas.sprite_pixels.x),
+                        .height = @floatFromInt(WallAtlas.sprite_pixels.y),
+                    },
+                    color,
+                };
+            }
+            const i: i32 = @intCast((square_bits & animation_mask) >> animation_shift);
+            break :choosing_src .{
+                self.wall_texture,
+                rl.Rectangle{
+                    .x = @floatFromInt(@mod(i, wall_dimensions.x) * sprite_pixels.x),
+                    .y = @floatFromInt(@divTrunc(i, wall_dimensions.y) * sprite_pixels.y),
+                    .width = @floatFromInt(WallAtlas.sprite_pixels.x),
+                    .height = @floatFromInt(WallAtlas.sprite_pixels.y),
+                },
+                .ray_white,
+            };
+        };
+        rl.drawTexturePro(
+            texture_src[0],
+            texture_src[1],
+            rl.Rectangle{
+                .x = @floatFromInt(isometric_x),
+                .y = @floatFromInt(isometric_y),
+                .width = @floatFromInt(WallAtlas.sprite_pixels.x),
+                .height = @floatFromInt(WallAtlas.sprite_pixels.y),
+            },
+            rl.Vector2{
+                .x = 0,
+                .y = 0,
+            },
+            0.0,
+            texture_src[2],
+        );
+    }
 };
 
 /// The Menu displays various controls at the top of the screen while allowing the user to interact
@@ -405,10 +525,18 @@ const Menu = struct {
         .{ "Wilson's Adder", wilson.generate },
     };
 
+    const solver_table: [2]struct {
+        [:0]const u8,
+        *const fn (*maze.Maze, std.mem.Allocator) maze.MazeError!*maze.Maze,
+    } = .{
+        .{ "DFS", dfs.solve },
+        .{ "BFS", bfs.solve },
+    };
+
     /// The string Raylib needs to create the options in the generator drop down menu.
     const generator_options: [:0]const u8 = generator_table[0][0] ++ ";" ++ generator_table[1][0];
     /// The solving algorithm options for Raylib drop down.
-    const solver_options: [:0]const u8 = "DFS;BFS";
+    const solver_options: [:0]const u8 = solver_table[0][0] ++ ";" ++ solver_table[1][0];
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
     /// The height of the space for text above each button.
@@ -533,6 +661,7 @@ const Menu = struct {
     fn drawMenu(
         self: *Menu,
         m: *maze.Maze,
+        cur_tape: **maze.Tape,
         allocator: std.mem.Allocator,
     ) !void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
@@ -542,6 +671,9 @@ const Menu = struct {
             // Restart maze with the specified dropdown options.
             m.clearRetainingCapacity();
             _ = try generator_table[@intCast(self.generator.active)][1](m, allocator);
+            _ = try solver_table[@intCast(self.solver.active)][1](m, allocator);
+            m.zeroSquares();
+            cur_tape.* = &m.build_history;
             self.direction = Direction.forward;
             self.algorithm_dt = default_dt;
         }
