@@ -8,6 +8,7 @@ const sol = @import("../solve.zig");
 pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
     const start: maze.Point = try sol.setStartAndFinish(m);
     var dfs = std.array_list.Managed(maze.Point).init(allocator);
+    defer dfs.deinit();
     _ = dfs.append(start) catch return maze.MazeError.AllocFail;
     branching: while (dfs.items.len != 0) {
         const cur: maze.Point = dfs.getLast();
