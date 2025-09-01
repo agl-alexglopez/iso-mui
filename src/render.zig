@@ -316,7 +316,11 @@ const WallAtlas = struct {
     wall_texture: rl.Texture2D,
     /// Texture used to aid in visual representation of backtracking during building.
     backtrack_texture: rl.Texture2D,
-    /// The blank white block we can tint with rgb colors according to threads.
+    /// This is a white block with an outline drawn in pixel art. It is white because this allows
+    /// us to give it a tint with Raylib at runtime equivalent to the RGB color stored in the lower
+    /// 24 bits of a maze square. This is not relevant for one solver but if we ever implement
+    /// multiple threaded solvers we can have a runtime tetradic color scheme to illustrate exactly
+    /// which threads visited maze squares and when.
     solve_texture: rl.Texture2D,
 
     /// Initialize the wall texture atlas by loading its files with Raylib.
@@ -407,7 +411,9 @@ const WallAtlas = struct {
     }
 
     /// Draws the appropriate maze square to the screen based on the values of the square bits.
-    /// Solvers are focused on colors for displaying the paths.
+    /// Solvers are focused on colors for displaying the paths. The solver block is white so that
+    /// we can use Raylib's tint capability to display the RGB color stored in the lower 24 bits
+    /// of a maze square.
     fn drawSolverTexture(
         self: *const WallAtlas,
         m: *const maze.Maze,
