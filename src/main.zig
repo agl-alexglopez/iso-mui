@@ -45,9 +45,19 @@ const Args = struct {
 };
 
 pub fn main() !void {
+    // Enable verbose log if needed when bugs begin to appear in the debug allocator.
     var allocator_impl = switch (builtin.mode) {
-        .Debug => heap.DebugAllocator(.{}){},
-        .ReleaseFast, .ReleaseSafe, .ReleaseSmall => heap.ArenaAllocator.init(heap.page_allocator),
+        .Debug => heap.DebugAllocator(.{
+            .backing_allocator_zeroes = true,
+            .retain_metadata = true,
+            .never_unmap = true,
+            .safety = true,
+            .thread_safe = true,
+        }){},
+        .ReleaseFast, .ReleaseSafe, .ReleaseSmall => heap.GeneralPurposeAllocator(.{
+            .thread_safe = true,
+            .safety = true,
+        }){},
     };
     var maze_args = Args{};
     const allocator = allocator_impl.allocator();
