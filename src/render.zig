@@ -448,11 +448,11 @@ const WallAtlas = struct {
                 };
             }
             if (maze.isPath(square_bits)) {
-                const rgb: struct { u8, u8, u8 } = sol.getPaint(square_bits);
                 var color: rl.Color = .ray_white;
                 var texture = self.wall_texture;
-                if (rgb[0] != 0 or rgb[1] != 0 or rgb[2] != 0) {
+                if (sol.hasPaint(square_bits)) {
                     texture = self.solve_texture;
+                    const rgb: struct { u8, u8, u8 } = sol.getPaint(square_bits);
                     color = rl.Color{
                         .r = rgb[0],
                         .g = rgb[1],
