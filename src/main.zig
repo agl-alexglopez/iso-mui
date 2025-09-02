@@ -46,6 +46,8 @@ const Args = struct {
 
 pub fn main() !void {
     // Enable verbose log if needed when bugs begin to appear in the debug allocator.
+    // While thread safety is not strictly needed now if solvers become multi-threaded the
+    // allocators must be thread safe for thread specific requests for data structure memory.
     var allocator_impl = switch (builtin.mode) {
         .Debug => heap.DebugAllocator(.{
             .backing_allocator_zeroes = true,
