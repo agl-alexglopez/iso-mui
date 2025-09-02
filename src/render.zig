@@ -547,9 +547,23 @@ const Menu = struct {
     };
 
     /// The string Raylib needs to create the options in the generator drop down menu.
-    const generator_options: [:0]const u8 = generator_table[0][0] ++ ";" ++ generator_table[1][0];
+    const generator_options: [:0]const u8 = blk: {
+        var str: [:0]const u8 = "";
+        for (0..generator_table.len - 1) |i| {
+            str = str ++ generator_table[i][0] ++ ";";
+        }
+        str = str ++ generator_table[generator_table.len - 1][0];
+        break :blk str;
+    };
     /// The solving algorithm options for Raylib drop down.
-    const solver_options: [:0]const u8 = solver_table[0][0] ++ ";" ++ solver_table[1][0];
+    const solver_options: [:0]const u8 = blk: {
+        var str: [:0]const u8 = "";
+        for (0..solver_table.len - 1) |i| {
+            str = str ++ solver_table[i][0] ++ ";";
+        }
+        str = str ++ solver_table[solver_table.len - 1][0];
+        break :blk str;
+    };
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
     /// The height of the space for text above each button.
