@@ -35,10 +35,10 @@ pub fn build(b: *std.Build) void {
 
     // LSP convenience helpers
     const exe_check = b.addExecutable(.{
-        .name = "iso-mui",
+        .name = "iso_mui",
         .root_module = exe_mod,
     });
-    const check = b.step("check", "Check if iso-mui compiles");
+    const check = b.step("check", "Check if iso_mui compiles");
     check.dependOn(&exe_check.step);
 
     // Add a run step for shorter command line use.
@@ -46,6 +46,6 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| {
         exe_run.addArgs(args);
     }
-    const run = b.step("run", "Run iso-mui");
+    const run = b.step("run", "Run iso_mui");
     run.dependOn(&exe_run.step);
 }
