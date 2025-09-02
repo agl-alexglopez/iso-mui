@@ -68,7 +68,7 @@ pub const Render = struct {
     ) !Render {
         comptime assert(WallAtlas.sprite_pixels.x >= 0 and WallAtlas.sprite_pixels.y >= 0);
         comptime assert(WallAtlas.wall_dimensions.x >= 0 and WallAtlas.wall_dimensions.y >= 0);
-        rl.initWindow(screen_width, screen_height, "zig-zag-mui");
+        rl.initWindow(screen_width, screen_height, "iso-mui");
         rl.setTargetFPS(60);
         const cols: i32 = @max(maze_cols, maze_rows);
         const rows: i32 = cols;
@@ -381,7 +381,9 @@ const WallAtlas = struct {
                     },
                 };
             }
-            const i: i32 = @intCast((square_bits & animation_mask) >> animation_shift);
+            // The 0th index of the wall atlas is a path so if we know this is a wall we should
+            // never allow it to be a path if the animation has not yet been updated.
+            const i: i32 = @intCast(@max(1, (square_bits & animation_mask) >> animation_shift));
             break :choosing_src .{
                 self.wall_texture,
                 rl.Rectangle{
