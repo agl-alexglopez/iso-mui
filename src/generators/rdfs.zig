@@ -15,12 +15,10 @@ const maze = @import("../maze.zig");
 /// Generates a randomized depth first search maze. This maze will produce long windy passages.
 /// Because the building of the maze is recorded in the maze build history, allocation may fail.
 pub fn generate(
-    m: *maze.Maze,
     allocator: std.mem.Allocator,
+    m: *maze.Maze,
 ) maze.MazeError!*maze.Maze {
-    // Randomized depth first search needs no auxiliary memory.
-    _ = allocator;
-    try gen.fillMazeWithWalls(m);
+    try gen.fillMazeWithWalls(m, allocator);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
     const start = try gen.randPoint(
@@ -40,7 +38,7 @@ pub fn generate(
                 .c = cur.c + direction.c,
             };
             if (gen.canBuildNewSquare(m, branch)) {
-                try gen.recordBacktrackPath(m, cur, branch);
+                try gen.recordBacktrackPath(allocator, m, cur, branch);
                 cur = branch;
                 continue :branching;
             }
@@ -54,18 +52,24 @@ pub fn generate(
         };
         const cur_square = m.get(cur.r, cur.c);
         const half_step_square = m.get(half_step.r, half_step.c);
-        try m.build_history.record(.{
-            .p = cur,
-            .before = cur_square,
-            .after = cur_square & ~gen.backtrack_mask,
-            .burst = 1,
-        });
-        try m.build_history.record(.{
-            .p = half_step,
-            .before = half_step_square,
-            .after = half_step_square & ~gen.backtrack_mask,
-            .burst = 1,
-        });
+        try m.build_history.record(
+            allocator,
+            .{
+                .p = cur,
+                .before = cur_square,
+                .after = cur_square & ~gen.backtrack_mask,
+                .burst = 1,
+            },
+        );
+        try m.build_history.record(
+            allocator,
+            .{
+                .p = half_step,
+                .before = half_step_square,
+                .after = half_step_square & ~gen.backtrack_mask,
+                .burst = 1,
+            },
+        );
         m.getPtr(cur.r, cur.c).* &= ~gen.backtrack_mask;
         m.getPtr(half_step.r, half_step.c).* &= ~gen.backtrack_mask;
         const full_point = gen.backtracking_points[@intCast(direction)];

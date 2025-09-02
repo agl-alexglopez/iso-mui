@@ -34,12 +34,12 @@ pub const all_directions = [8]maze.Point{
 /// Sets the start and finish squares randomly and records their construction in the solve
 /// history tape. If sufficient starting and finishing squares cannot be found a logical error
 /// is returned. Returns the starting square upon success.
-pub fn setStartAndFinish(m: *maze.Maze) maze.MazeError!maze.Point {
+pub fn setStartAndFinish(allocator: std.mem.Allocator, m: *maze.Maze) maze.MazeError!maze.Point {
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
     const start: maze.Point = try randPoint(m, rand);
     const start_square = m.get(start.r, start.c);
-    try m.solve_history.record(maze.Delta{
+    try m.solve_history.record(allocator, maze.Delta{
         .p = start,
         .before = start_square,
         .after = start_square | start_bit,
@@ -48,7 +48,7 @@ pub fn setStartAndFinish(m: *maze.Maze) maze.MazeError!maze.Point {
     m.getPtr(start.r, start.c).* |= start_bit;
     const finish: maze.Point = try randPoint(m, rand);
     const finish_square = m.get(finish.r, finish.c);
-    try m.solve_history.record(maze.Delta{
+    try m.solve_history.record(allocator, maze.Delta{
         .p = finish,
         .before = finish_square,
         .after = finish_square | finish_bit,

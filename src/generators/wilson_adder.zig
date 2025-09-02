@@ -36,12 +36,10 @@ const RandomWalk = struct {
 /// randomness determines. However, in practice this is a very fast algorithm because we start by
 /// connecting walls and there is a perimeter of complete walls around the maze.
 pub fn generate(
-    m: *maze.Maze,
     allocator: std.mem.Allocator,
+    m: *maze.Maze,
 ) maze.MazeError!*maze.Maze {
-    // Wilson's algorithm needs no auxiliary memory.
-    _ = allocator;
-    try gen.buildWallPerimeter(m);
+    try gen.buildWallPerimeter(m, allocator);
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
     var cur: RandomWalk = .{
@@ -68,7 +66,7 @@ pub fn generate(
             if (!isValidStep(m, cur.next, cur.prev)) {
                 continue :choosing_step;
             }
-            if (!try nextStep(m, &cur)) {
+            if (!try nextStep(allocator, m, &cur)) {
                 return m;
             }
             continue :walking;
@@ -84,12 +82,13 @@ pub fn generate(
 /// built because the maze is complete. In this case null is returned. Otherwise the next RandomWalk
 /// state is returned via pointer to the same argument provided.
 fn nextStep(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     walk: *RandomWalk,
 ) maze.MazeError!bool {
     if (gen.isBuilt(m, walk.next)) {
-        try closeGap(m, walk.walk, walk.next);
-        try connectWalk(m, walk.walk);
+        try closeGap(allocator, m, walk.walk, walk.next);
+        try connectWalk(allocator, m, walk.walk);
         if (try gen.choosePointFromRow(m, walk.prev_row_start, gen.ParityPoint.even)) |point| {
             walk.prev_row_start = point.r;
             walk.walk = point;
@@ -100,7 +99,7 @@ fn nextStep(
         return false;
     }
     if (foundLoop(m, walk.next)) {
-        try eraseLoop(m, .{
+        try eraseLoop(allocator, m, .{
             .walk = walk.walk,
             .root = walk.next,
         });
@@ -112,7 +111,7 @@ fn nextStep(
         };
         return true;
     }
-    try markWall(m, walk);
+    try markWall(allocator, m, walk);
     walk.prev = walk.walk;
     walk.walk = walk.next;
     return true;
@@ -121,6 +120,7 @@ fn nextStep(
 /// Erases a loop if encountered during a random walk. The loop is erased all the way back to the
 /// point of intersection between the next step and the current walk head.
 fn eraseLoop(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     walk: Loop,
 ) !void {
@@ -136,19 +136,25 @@ fn eraseLoop(
             .c = cur.walk.c + half_offset.c,
         };
         const half_square = m.get(half_step.r, half_step.c);
-        try m.build_history.record(.{
-            .p = cur.walk,
-            .before = cur_square,
-            .after = (((cur_square & ~walk_bit) & ~maze.wall_mask) & ~gen.backtrack_mask) |
-                maze.path_bit,
-            .burst = 1,
-        });
-        try m.build_history.record(.{
-            .p = half_step,
-            .before = half_square,
-            .after = ((half_square & ~gen.backtrack_mask) & ~maze.wall_mask) | maze.path_bit,
-            .burst = 1,
-        });
+        try m.build_history.record(
+            allocator,
+            .{
+                .p = cur.walk,
+                .before = cur_square,
+                .after = (((cur_square & ~walk_bit) & ~maze.wall_mask) & ~gen.backtrack_mask) |
+                    maze.path_bit,
+                .burst = 1,
+            },
+        );
+        try m.build_history.record(
+            allocator,
+            .{
+                .p = half_step,
+                .before = half_square,
+                .after = ((half_square & ~gen.backtrack_mask) & ~maze.wall_mask) | maze.path_bit,
+                .burst = 1,
+            },
+        );
         // Cleanup and backtrack.
         m.getPtr(half_step.r, half_step.c).* = ((half_square & ~gen.backtrack_mask) &
             ~maze.wall_mask) |
@@ -165,6 +171,7 @@ fn eraseLoop(
 /// Connects a valid random walk that has found another built section of the maze to connect with.
 /// No loop has formed and therefore the randomized walk is valid and connectable.
 fn connectWalk(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     walk: maze.Point,
 ) !void {
@@ -172,21 +179,22 @@ fn connectWalk(
     while ((m.get(cur.r, cur.c) & gen.backtrack_mask) != 0) {
         const full_offset = backtrackPoint(m, cur);
         const half_offset = backtrackHalfPoint(m, cur);
-        try buildWalkLine(m, cur);
-        try buildWalkLine(m, .{
+        try buildWalkLine(allocator, m, cur);
+        try buildWalkLine(allocator, m, .{
             .r = cur.r + half_offset.r,
             .c = cur.c + half_offset.c,
         });
         cur.r += full_offset.r;
         cur.c += full_offset.c;
     }
-    try buildWalkLine(m, cur);
+    try buildWalkLine(allocator, m, cur);
 }
 
 /// Marks the wall with the appropriate backtracking marks while building. This should be used when
 /// a valid step has been found to progress the random walk. Neither a loop or another part of the
 /// built maze has been found so we continue building, leaving backtracking marks for ourselves.
 fn markWall(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     this_walk: *const RandomWalk,
 ) maze.MazeError!void {
@@ -220,18 +228,24 @@ fn markWall(
     } else {
         return maze.MazeError.LogicFail;
     }
-    try m.build_history.record(.{
-        .p = wall,
-        .before = wall_before,
-        .after = m.get(wall.r, wall.c),
-        .burst = 1,
-    });
-    try m.build_history.record(.{
-        .p = this_walk.next,
-        .before = next_before,
-        .after = m.get(this_walk.next.r, this_walk.next.c),
-        .burst = 1,
-    });
+    try m.build_history.record(
+        allocator,
+        .{
+            .p = wall,
+            .before = wall_before,
+            .after = m.get(wall.r, wall.c),
+            .burst = 1,
+        },
+    );
+    try m.build_history.record(
+        allocator,
+        .{
+            .p = this_walk.next,
+            .before = next_before,
+            .after = m.get(this_walk.next.r, this_walk.next.c),
+            .burst = 1,
+        },
+    );
 }
 
 /// The function should be used when a successful random walk is in the building stage and is now
@@ -239,6 +253,7 @@ fn markWall(
 /// be erased and all that will remain is the wall bits indicating the shape the piece takes. All
 /// surrounding walls must be updated to indicate a new location of a wall as well.
 fn buildWalkLine(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     p: maze.Point,
 ) !void {
@@ -317,11 +332,12 @@ fn buildWalkLine(
     m.getPtr(p.r, p.c).* = (((square | wall | gen.builder_bit) & ~maze.path_bit) &
         ~walk_bit) &
         ~gen.backtrack_mask;
-    try m.build_history.recordBurst(wall_changes[0..burst]);
+    try m.build_history.recordBurst(allocator, wall_changes[0..burst]);
 }
 
 /// Closes the gap between cur and next by building a wall line.
 fn closeGap(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     cur: maze.Point,
     next: maze.Point,
@@ -338,7 +354,7 @@ fn closeGap(
     } else {
         return maze.MazeError.LogicFail;
     }
-    try buildWalkLine(m, wall);
+    try buildWalkLine(allocator, m, wall);
 }
 
 /// Returns true if the next step we want to take in the random walk is not a loop and is valid.

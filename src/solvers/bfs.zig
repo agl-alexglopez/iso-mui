@@ -46,14 +46,17 @@ const Queue = struct {
 
 /// Solves a maze with a breadth first search. Visually this is distinct from a depth first search
 /// because the colored blocks will expand in a different section of the map on each step.
-pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.Maze {
+pub fn solve(
+    allocator: std.mem.Allocator,
+    m: *maze.Maze,
+) maze.MazeError!*maze.Maze {
     var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
     var parents = std.AutoArrayHashMap(maze.Point, maze.Point).init(allocator);
     defer {
         parents.deinit();
         bfs.deinit(allocator);
     }
-    const start: maze.Point = try sol.setStartAndFinish(m);
+    const start: maze.Point = try sol.setStartAndFinish(allocator, m);
     try put(&parents, start, .{ .r = -1, .c = -1 });
     try bfs.queue(start, allocator);
     while (bfs.len != 0) {
@@ -61,7 +64,7 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
         defer allocator.destroy(cur);
         const square: maze.Square = m.get(cur.point.r, cur.point.c);
         if (sol.isFinish(square)) {
-            try m.solve_history.record(maze.Delta{
+            try m.solve_history.record(allocator, maze.Delta{
                 .p = cur.point,
                 .before = square,
                 .after = square | sol.thread_paints[0],
@@ -75,7 +78,7 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
             // and then paint this path the color of the winner when all threads finish.
             while (prev.r > 0) {
                 const s = m.get(prev.r, prev.c);
-                try m.solve_history.record(maze.Delta{
+                try m.solve_history.record(allocator, maze.Delta{
                     .p = prev,
                     .before = s,
                     .after = s | sol.finish_bit,
@@ -86,7 +89,7 @@ pub fn solve(m: *maze.Maze, allocator: std.mem.Allocator) maze.MazeError!*maze.M
             }
             return m;
         }
-        try m.solve_history.record(maze.Delta{
+        try m.solve_history.record(allocator, maze.Delta{
             .p = cur.point,
             .before = square,
             .after = square | sol.thread_paints[0],

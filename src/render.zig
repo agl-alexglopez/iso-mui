@@ -51,7 +51,6 @@ const bfs = @import("solvers/bfs.zig");
 /// does not need to have a dependency on the specific library being used. Now we use Raylib and
 /// pixel art, but with this design that may change in the future.
 pub const Render = struct {
-    allocator: std.mem.Allocator,
     maze: maze.Maze,
     atlas: WallAtlas,
     virtual_screen: rl.RenderTexture2D,
@@ -73,7 +72,6 @@ pub const Render = struct {
         const cols: i32 = @max(maze_cols, maze_rows);
         const rows: i32 = cols;
         const r = Render{
-            .allocator = allocator,
             .maze = try maze.Maze.init(allocator, rows, cols),
             .atlas = try WallAtlas.init("atlas_maze_walls_isometric_animated.png"),
             .virtual_screen = try rl.RenderTexture2D.init(
@@ -90,20 +88,21 @@ pub const Render = struct {
     }
 
     /// Frees any resources used by the Render type and the library it uses.
-    pub fn deinit(self: *Render) void {
+    pub fn deinit(self: *Render, allocator: std.mem.Allocator) void {
         rl.unloadTexture(self.virtual_screen.texture);
         self.atlas.deinit();
         rl.closeWindow();
-        self.maze.deinit(self.allocator);
+        self.maze.deinit(allocator);
     }
 
     /// The run loop continues until the user has exited the application by closing the window.
     /// This function may allocate memory and thus can fail.
     pub fn run(
         self: *Render,
+        allocator: std.mem.Allocator,
     ) !void {
-        _ = try Menu.generator_table[0][1](&self.maze, self.allocator);
-        _ = try Menu.solver_table[0][1](&self.maze, self.allocator);
+        _ = try Menu.generator_table[0][1](allocator, &self.maze);
+        _ = try Menu.solver_table[0][1](allocator, &self.maze);
         self.maze.zeroSquares();
         var cur_tape: *maze.Tape = &self.maze.build_history;
         var algorithm_t: f64 = 0.0;
@@ -147,13 +146,14 @@ pub const Render = struct {
                 algorithm_t += self.menu.algorithm_dt;
                 algorithm_accumulate -= self.menu.algorithm_dt;
             }
-            try self.render(&cur_tape);
+            try self.render(allocator, &cur_tape);
         }
     }
 
     /// Performs pass over maze rendering the current state given the status of the Square bits.
     fn render(
         self: *Render,
+        allocator: std.mem.Allocator,
         cur_tape: **maze.Tape,
     ) !void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
@@ -206,7 +206,7 @@ pub const Render = struct {
             .ray_white,
         );
         // Menu drawing should be done in real screen only.
-        try self.menu.drawMenu(&self.maze, cur_tape, self.allocator);
+        try self.menu.drawMenu(allocator, &self.maze, cur_tape);
     }
 
     /// Progresses the animation frame of wall squares.
@@ -532,7 +532,7 @@ const Menu = struct {
     /// selected via an enum as index.
     const generator_table: [2]struct {
         [:0]const u8,
-        *const fn (*maze.Maze, std.mem.Allocator) maze.MazeError!*maze.Maze,
+        *const fn (std.mem.Allocator, *maze.Maze) maze.MazeError!*maze.Maze,
     } = .{
         .{ "RDFS", rdfs.generate },
         .{ "Wilson's Adder", wilson.generate },
@@ -540,7 +540,7 @@ const Menu = struct {
 
     const solver_table: [2]struct {
         [:0]const u8,
-        *const fn (*maze.Maze, std.mem.Allocator) maze.MazeError!*maze.Maze,
+        *const fn (std.mem.Allocator, *maze.Maze) maze.MazeError!*maze.Maze,
     } = .{
         .{ "DFS", dfs.solve },
         .{ "BFS", bfs.solve },
@@ -688,9 +688,9 @@ const Menu = struct {
     /// control the direction of the playback and the speed which requires an immediate action.
     fn drawMenu(
         self: *Menu,
+        allocator: std.mem.Allocator,
         m: *maze.Maze,
         cur_tape: **maze.Tape,
-        allocator: std.mem.Allocator,
     ) !void {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
@@ -698,8 +698,8 @@ const Menu = struct {
         if (drawButton("Restart:", self.start)) {
             // Restart maze with the specified dropdown options.
             m.clearRetainingCapacity();
-            _ = try generator_table[@intCast(self.generator.active)][1](m, allocator);
-            _ = try solver_table[@intCast(self.solver.active)][1](m, allocator);
+            _ = try generator_table[@intCast(self.generator.active)][1](allocator, m);
+            _ = try solver_table[@intCast(self.solver.active)][1](allocator, m);
             m.zeroSquares();
             cur_tape.* = &m.build_history;
             self.direction = Direction.forward;

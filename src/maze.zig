@@ -146,15 +146,13 @@ pub const Delta = struct {
 /// we can play the maze algorithms forward or in reverse in whatever format we please. The
 /// algorithms can also be stepped through for better understanding after we record the history.
 pub const Tape = struct {
-    deltas: std.array_list.Managed(Delta),
+    deltas: std.array_list.Aligned(Delta, null),
     i: usize,
 
     /// A Tape uses a dynamic storage method for Deltas so needs an allocator.
-    fn init(
-        allocator: Allocator,
-    ) Tape {
+    fn init() Tape {
         return Tape{
-            .deltas = std.array_list.Managed(Delta).init(allocator),
+            .deltas = .{},
             .i = 0,
         };
     }
@@ -162,8 +160,9 @@ pub const Tape = struct {
     /// Free the storage of Delta snapshots.
     fn deinit(
         self: *Tape,
+        allocator: Allocator,
     ) void {
-        self.deltas.deinit();
+        self.deltas.deinit(allocator);
         self.* = undefined;
     }
 
@@ -175,15 +174,17 @@ pub const Tape = struct {
     /// Records the requested delta to the back of the tape. This may allocate and can fail.
     pub fn record(
         self: *Tape,
+        allocator: Allocator,
         delta: Delta,
     ) MazeError!void {
-        _ = self.deltas.append(delta) catch return MazeError.AllocFail;
+        _ = self.deltas.append(allocator, delta) catch return MazeError.AllocFail;
     }
 
     /// Record a burst of deltas that correspond to a series of changes in squares that should
     /// occur at the same time. This function allocates and may fail.
     pub fn recordBurst(
         self: *Tape,
+        allocator: Allocator,
         burst: []const Delta,
     ) MazeError!void {
         if (self.deltas.items.len != 0 and
@@ -192,7 +193,7 @@ pub const Tape = struct {
         {
             return MazeError.LogicFail;
         }
-        _ = self.deltas.appendSlice(burst) catch return MazeError.AllocFail;
+        _ = self.deltas.appendSlice(allocator, burst) catch return MazeError.AllocFail;
     }
 };
 
@@ -217,8 +218,8 @@ pub const Maze = struct {
         const set_cols = (cols + 1) - @mod(cols, 2);
         return Maze{
             .maze = try Blueprint.init(allocator, set_rows, set_cols),
-            .build_history = Tape.init(allocator),
-            .solve_history = Tape.init(allocator),
+            .build_history = Tape.init(),
+            .solve_history = Tape.init(),
         };
     }
 
@@ -228,8 +229,8 @@ pub const Maze = struct {
         allocator: Allocator,
     ) void {
         self.maze.deinit(allocator);
-        self.build_history.deinit();
-        self.solve_history.deinit();
+        self.build_history.deinit(allocator);
+        self.solve_history.deinit(allocator);
         self.* = undefined;
     }
 

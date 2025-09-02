@@ -145,10 +145,11 @@ pub fn canBuildNewSquare(
 /// history of this action must be recorded in the maze Tape, allocation may fail.
 pub fn fillMazeWithWalls(
     m: *maze.Maze,
+    allocator: std.mem.Allocator,
 ) !void {
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
-            try buildWall(m, .{ .r = @intCast(r), .c = @intCast(c) });
+            try buildWall(m, .{ .r = @intCast(r), .c = @intCast(c) }, allocator);
         }
     }
     const burst: usize = @intCast(m.maze.rows * m.maze.cols);
@@ -159,15 +160,16 @@ pub fn fillMazeWithWalls(
 /// Builds a perimeter wall around the outside of the maze. All Squares within are paths.
 pub fn buildWallPerimeter(
     m: *maze.Maze,
+    allocator: std.mem.Allocator,
 ) !void {
     var burst: usize = 0;
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
             if ((c == 0) or (c == m.maze.cols - 1) or (r == 0) or (r == m.maze.rows - 1)) {
                 m.getPtr(@intCast(r), @intCast(c)).* |= builder_bit;
-                burst += try buildPerimeterPiece(m, .{ .r = @intCast(r), .c = @intCast(c) });
+                burst += try buildPerimeterPiece(m, .{ .r = @intCast(r), .c = @intCast(c) }, allocator);
             } else {
-                burst += try buildPath(m, .{ .r = @intCast(r), .c = @intCast(c) });
+                burst += try buildPath(allocator, m, .{ .r = @intCast(r), .c = @intCast(c) });
             }
         }
     }
@@ -181,6 +183,7 @@ pub fn buildWallPerimeter(
 pub fn buildWall(
     m: *maze.Maze,
     p: maze.Point,
+    allocator: std.mem.Allocator,
 ) !void {
     var wall: maze.Square = 0b0;
     if (p.r > 0) {
@@ -195,18 +198,22 @@ pub fn buildWall(
     if (p.c + 1 < m.maze.cols) {
         wall |= maze.east_wall;
     }
-    try m.build_history.record(.{
-        .p = p,
-        .before = 0b0,
-        .after = wall,
-        .burst = 1,
-    });
+    try m.build_history.record(
+        allocator,
+        .{
+            .p = p,
+            .before = 0b0,
+            .after = wall,
+            .burst = 1,
+        },
+    );
     m.getPtr(p.r, p.c).* = wall;
 }
 
 pub fn buildPerimeterPiece(
     m: *maze.Maze,
     p: maze.Point,
+    allocator: std.mem.Allocator,
 ) !usize {
     var deltas: [5]maze.Delta = undefined;
     var burst: usize = 1;
@@ -280,7 +287,7 @@ pub fn buildPerimeterPiece(
     };
     deltas[burst - 1].burst = burst;
     m.getPtr(p.r, p.c).* |= (before & ~maze.path_bit) | wall;
-    try m.build_history.recordBurst(deltas[0..burst]);
+    try m.build_history.recordBurst(allocator, deltas[0..burst]);
     return burst;
 }
 
@@ -288,6 +295,7 @@ pub fn buildPerimeterPiece(
 /// changed and surrounding squares must be notified a neighboring wall no longer exists. Allocation
 /// may fail while recording the history.
 pub fn buildPath(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     p: maze.Point,
 ) !usize {
@@ -346,7 +354,7 @@ pub fn buildPath(
         burst += 1;
     }
     wall_changes[0].burst = burst;
-    try m.build_history.recordBurst(wall_changes[0..burst]);
+    try m.build_history.recordBurst(allocator, wall_changes[0..burst]);
     return burst;
 }
 
@@ -354,6 +362,7 @@ pub fn buildPath(
 /// direction it came from and also updates surrounding walls of a new path Square. History is
 /// recorded so allocation may fail.
 pub fn carveBacktrackSquare(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     p: maze.Point,
     backtrack: maze.Square,
@@ -425,7 +434,7 @@ pub fn carveBacktrackSquare(
         burst += 1;
     }
     wall_changes[0].burst = burst;
-    try m.build_history.recordBurst(wall_changes[0..burst]);
+    try m.build_history.recordBurst(allocator, wall_changes[0..burst]);
 }
 
 /// Records the intended progress of the backtracking path from current to next. We progress the
@@ -433,11 +442,12 @@ pub fn carveBacktrackSquare(
 /// we record this history allocation may fail. Assumes cur and next are not equal and returns
 /// an error if this is not the case.
 pub fn recordBacktrackPath(
+    allocator: std.mem.Allocator,
     m: *maze.Maze,
     cur: maze.Point,
     next: maze.Point,
 ) maze.MazeError!void {
-    try carveBacktrackSquare(m, cur, m.get(cur.r, cur.c) & backtrack_mask);
+    try carveBacktrackSquare(allocator, m, cur, m.get(cur.r, cur.c) & backtrack_mask);
     var wall = cur;
     var backtracking: maze.Square = 0;
     if (next.r < cur.r) {
@@ -455,8 +465,8 @@ pub fn recordBacktrackPath(
     } else {
         return maze.MazeError.LogicFail;
     }
-    try carveBacktrackSquare(m, wall, backtracking);
-    try carveBacktrackSquare(m, next, backtracking);
+    try carveBacktrackSquare(allocator, m, wall, backtracking);
+    try carveBacktrackSquare(allocator, m, next, backtracking);
 }
 
 /// Gets a string representation of a maze square. Right now only path or wall for debug print.

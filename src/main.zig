@@ -90,6 +90,6 @@ pub fn main() !void {
         maze_args.width,
         maze_args.height,
     );
-    defer loop.deinit();
-    try loop.run();
+    defer loop.deinit(allocator);
+    try loop.run(allocator);
 }
