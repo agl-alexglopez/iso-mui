@@ -1,5 +1,8 @@
 // Standard library stuff.
 const std = @import("std");
+const heap = std.heap;
+// Conditional compilation for debug or release.
+const builtin = @import("builtin");
 // Rendering pipeline module.
 const render = @import("render.zig");
 
@@ -42,10 +45,12 @@ const Args = struct {
 };
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    var allocator_impl = switch (builtin.mode) {
+        .Debug => heap.DebugAllocator(.{}){},
+        .ReleaseFast, .ReleaseSafe, .ReleaseSmall => heap.ArenaAllocator.init(heap.page_allocator),
+    };
     var maze_args = Args{};
-    const allocator = arena.allocator();
-    defer arena.deinit();
+    const allocator = allocator_impl.allocator();
     for (std.os.argv[1..]) |a| {
         const arg = std.mem.span(a);
         if (std.mem.startsWith(u8, arg, Args.row_flag)) {
