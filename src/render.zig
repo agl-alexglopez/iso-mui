@@ -34,7 +34,7 @@ const rg = @import("raygui");
 // Low level maze helper module for the core Square type and grid indexing logic.
 const maze = @import("maze.zig");
 // The maze generator module for maze building related helpers and logic.
-const gen = @import("generator.zig");
+const gen = @import("generate.zig");
 const rdfs = @import("generators/rdfs.zig");
 const wilson = @import("generators/wilson_adder.zig");
 

@@ -9,7 +9,7 @@
 //! random mazes, but otherwise the algorithm is extremely simple and efficient.
 const std = @import("std");
 
-const gen = @import("../generator.zig");
+const gen = @import("../generate.zig");
 const maze = @import("../maze.zig");
 
 /// Generates a randomized depth first search maze. This maze will produce long windy passages.

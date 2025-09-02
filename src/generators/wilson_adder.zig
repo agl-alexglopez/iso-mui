@@ -9,7 +9,7 @@
 //! most visually pleasing mazes possible.
 const std = @import("std");
 
-const gen = @import("../generator.zig");
+const gen = @import("../generate.zig");
 const maze = @import("../maze.zig");
 
 /// Bit to help detect loops during random walks.
