@@ -56,9 +56,13 @@ pub fn main() !void {
             .safety = true,
             .thread_safe = true,
         }){},
-        .ReleaseFast, .ReleaseSafe, .ReleaseSmall => heap.GeneralPurposeAllocator(.{
+        .ReleaseSafe, .ReleaseSmall => heap.GeneralPurposeAllocator(.{
             .thread_safe = true,
             .safety = true,
+        }){},
+        .ReleaseFast => heap.GeneralPurposeAllocator(.{
+            .thread_safe = true,
+            .backing_allocator_zeroes = false,
         }){},
     };
     var maze_args = Args{};
