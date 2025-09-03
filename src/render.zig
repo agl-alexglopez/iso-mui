@@ -212,6 +212,10 @@ pub const Render = struct {
     /// Progresses the animation frame of wall squares.
     fn updateAnimations(m: *maze.Maze) void {
         var r: i32 = 0;
+        // Currently all walls should pulse to a set series of 15 frames so we sync them. In the
+        // past I had more randomized animations so I actually could make use of storing each
+        // frame in each Square and progressing it as I do now. Leave this comment in case
+        // future animations become randomized or otherwise benefit from bit storage.
         const sync_frame: i32 = @intCast((m.get(0, 0) & WallAtlas.animation_mask) >>
             WallAtlas.animation_shift);
         while (r < m.maze.rows) : (r += 1) {
