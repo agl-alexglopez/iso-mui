@@ -51,11 +51,20 @@ const bfs = @import("solvers/bfs.zig");
 /// does not need to have a dependency on the specific library being used. Now we use Raylib and
 /// pixel art, but with this design that may change in the future.
 pub const Render = struct {
+    /// The maze object we own during rendering. We must clear and reset it based on UI choices.
     maze: maze.Maze,
-    atlas: WallAtlas,
-    virtual_screen: rl.RenderTexture2D,
-    real_screen_dimensions: Xy,
+
+    /// The module we use to handle UI control of maze algorithm details.
     menu: Menu,
+
+    /// The module responsible for handling isometric pixel art and displaying it to screen.
+    atlas: WallAtlas,
+
+    /// The virtual screen to which we draw pixel perfect textures.
+    virtual_screen: rl.RenderTexture2D,
+
+    /// The real screen we use to scale up the completed virtual screen drawing in one call.
+    real_screen_dimensions: Xy,
 
     /// Initialize the render context.
     pub fn init(
@@ -123,28 +132,29 @@ pub const Render = struct {
                 animation_accumulate -= animation_dt;
             }
             while (algorithm_accumulate >= self.menu.algorithm_dt) {
-                if (self.menu.play_pause == Menu.PlayPause.play) {
-                    _ = switch (self.menu.direction) {
-                        .forward => {
-                            if (!nextMazeStep(&self.maze, cur_tape) and
-                                cur_tape == &self.maze.build_history)
-                            {
-                                cur_tape = &self.maze.solve_history;
-                                _ = nextMazeStep(&self.maze, cur_tape);
-                            }
-                        },
-                        .reverse => {
-                            if (!prevMazeStep(&self.maze, cur_tape) and
-                                cur_tape == &self.maze.solve_history)
-                            {
-                                cur_tape = &self.maze.build_history;
-                                _ = prevMazeStep(&self.maze, cur_tape);
-                            }
-                        },
-                    };
-                }
                 algorithm_t += self.menu.algorithm_dt;
                 algorithm_accumulate -= self.menu.algorithm_dt;
+                if (self.menu.play_pause == Menu.PlayPause.pause) {
+                    continue;
+                }
+                _ = switch (self.menu.direction) {
+                    .forward => {
+                        if (!nextMazeStep(&self.maze, cur_tape) and
+                            cur_tape == &self.maze.build_history)
+                        {
+                            cur_tape = &self.maze.solve_history;
+                            _ = nextMazeStep(&self.maze, cur_tape);
+                        }
+                    },
+                    .reverse => {
+                        if (!prevMazeStep(&self.maze, cur_tape) and
+                            cur_tape == &self.maze.solve_history)
+                        {
+                            cur_tape = &self.maze.build_history;
+                            _ = prevMazeStep(&self.maze, cur_tape);
+                        }
+                    },
+                };
             }
             try self.render(allocator, &cur_tape);
         }
@@ -154,6 +164,7 @@ pub const Render = struct {
     fn render(
         self: *Render,
         allocator: std.mem.Allocator,
+        /// Currently generator or solver. May be adjusted to point to other phase during function.
         cur_tape: **maze.Tape,
     ) !void {
         // First, draw the maze as the user has specified to a pixel perfect virtual screen.
@@ -298,28 +309,40 @@ const WallAtlas = struct {
     /// We will place any texture atlas for any wall styles we want in an asset folder. This is
     /// where we should also find solver animations.
     const asset_path: [:0]const u8 = "assets/";
+
     /// Walls can be efficiently stored and displayed in a 4x4 grid, aka a tile map or tile atlas.
     const atlas_folder: [:0]const u8 = "atlas/";
+
     /// Backtracking is the same texture no matter the style so leave it here.
     const backtracking_texture_atlas: [:0]const u8 = "atlas_maze_walls_backtrack.png";
+
     /// The white solve block that will take tint. A simple 32x32 pixel block.
     const solve_block: [:0]const u8 = "solve_block.png";
+
     /// The location of all texture atlas files of *.json and *.png type.
     pub const path: [:0]const u8 = asset_path ++ atlas_folder;
-    /// The total area of the texture atlas grid in pixels.
+
     /// The area of a single maze wall shape square.
     pub const sprite_pixels: Xy = .{ .x = 32, .y = 32 };
+
     /// The number of rows and columns for a wall texture atlas.
     pub const wall_dimensions: Xy = .{ .x = 4, .y = 4 };
+
     /// The dimensions of the backtracking square texture. Pixel dimensions are the same.
     pub const backtrack_dimensions: Xy = .{ .x = 2, .y = 2 };
+
+    /// The mask to get and set animation frames from wall square high bits.
     const animation_mask: maze.Square = 0xf00000;
+
+    /// The shift to change the animation bits to indexes for the texture atlas.
     const animation_shift: usize = 20;
 
     /// The atlas used to load different wall shapes based on connections after building.
     wall_texture: rl.Texture2D,
+
     /// Texture used to aid in visual representation of backtracking during building.
     backtrack_texture: rl.Texture2D,
+
     /// This is a white block with an outline drawn in pixel art. It is white because this allows
     /// us to give it a tint with Raylib at runtime equivalent to the RGB color stored in the lower
     /// 24 bits of a maze square. This is not relevant for one solver but if we ever implement
@@ -339,6 +362,7 @@ const WallAtlas = struct {
         };
     }
 
+    /// Unloads the textures for this atlas module.
     pub fn deinit(self: *WallAtlas) void {
         rl.unloadTexture(self.wall_texture);
         rl.unloadTexture(self.backtrack_texture);
@@ -511,24 +535,33 @@ const WallAtlas = struct {
 /// Therefore, the Menu module is responsible for drawing but may mutate the maze as requested by
 /// the user, especially when a newly requested maze type must be loaded in.
 const Menu = struct {
+    /// The direction that the maze algorithms run. Fully reversible if desired.
     const Direction = enum {
         forward,
         reverse,
     };
 
+    /// Standard toggle pause play for the user.
     const PlayPause = enum {
         play,
         pause,
     };
 
+    /// A drop down notably requires a string of options for Raylib to display.
     const Dropdown = struct {
+        /// The position and size for the real screen.
         dimensions: rl.Rectangle,
+        /// The active option in the drop down.
         active: i32,
+        /// Indicates drop down can be edited.
         editmode: bool,
     };
 
+    /// The simplest UI element for simple boolean actions.
     const Button = struct {
+        /// The position and size for the real screen.
         dimensions: rl.Rectangle,
+        /// Taken from Raylib icon page for each button.
         icon: rg.IconName,
     };
 
@@ -568,55 +601,88 @@ const Menu = struct {
         str = str ++ solver_table[solver_table.len - 1][0];
         break :blk str;
     };
+
     /// The direction the algorithm can run in a drop down menu. Tapes can be played both ways.
     const direction_options: [:0]const u8 = "Forward;Reverse";
+
     /// The height of the space for text above each button.
     const label_height = 20;
+
     /// X direction padding to left and right of menu buttons so no cutoff.
     const x_padding = 20;
-    ///
-    const button_count = 8;
+
+    /// The color used for buttons and text.
     const green_hex = 0x00FF00FF;
+
+    /// The slowest animation possible for our algorithms.
     const max_algorithm_dt = 1.0;
+
+    /// The fastest animation possible for our algorithms.
     const min_algorithm_dt = 0.001;
+
+    // The starting animation speed.
     const default_dt = 0.3;
 
+    /// The number of fields representing our UI elements below.
+    const button_count = 8;
+
+    /// The maze builder selection. Dimensions set based on screen size at runtime.
     generator: Dropdown = .{
         .dimensions = undefined,
         .active = 0,
         .editmode = false,
     },
+
+    /// The maze solver selection. Dimensions set based on screen size at runtime.
     solver: Dropdown = .{
         .dimensions = undefined,
         .active = 0,
         .editmode = false,
     },
-    start: Button = .{
+
+    /// Restart the visualization based on selections.
+    restart: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.filetype_video,
     },
+
+    /// Immediately reverse the visualization.
     reverse: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.player_previous,
     },
+
+    /// Immediately pause or play the visualization.
     pause: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.player_pause,
     },
+
+    /// Immediately play the visualization.
     forward: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.player_next,
     },
+
+    /// Slow down the animation by increasing delta time.
     slower: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.arrow_down_fill,
     },
+
+    /// Speed up the animation by decreasing delta time.
     faster: Button = .{
         .dimensions = undefined,
         .icon = rg.IconName.arrow_up_fill,
     },
+
+    /// The current visualization speed.
     algorithm_dt: f64 = default_dt,
+
+    /// The direction the algorithm plays.
     direction: Direction = Direction.forward,
+
+    /// Toggle the visualization progress.
     play_pause: PlayPause = PlayPause.play,
 
     /// Initializes the dimensions and styles that will be used for the menu at the top of the
@@ -647,7 +713,7 @@ const Menu = struct {
             .width = button_width,
             .height = button_height,
         };
-        ret.start.dimensions = rl.Rectangle{
+        ret.restart.dimensions = rl.Rectangle{
             .x = (button_width * 2) + x_padding,
             .y = label_height,
             .width = button_width,
@@ -699,7 +765,7 @@ const Menu = struct {
         drawDropdown("Generator:", Menu.generator_options, &self.generator);
         drawDropdown("Solver:", Menu.solver_options, &self.solver);
         // Restart forces us to act upon any changes in the drop down menus.
-        if (drawButton("Restart:", self.start)) {
+        if (drawButton("Restart:", self.restart)) {
             // Restart maze with the specified dropdown options.
             m.clearRetainingCapacity();
             _ = try generator_table[@intCast(self.generator.active)][1](allocator, m);
@@ -787,6 +853,8 @@ const Menu = struct {
 /// to draw to a virtual pixel perfect screen first and then draw that entire screen to the real
 /// screen that users see. When drawing virtual to real, the height must be inverted.
 const Xy = struct {
+    /// Left to right coordinate or size.
     x: i32,
+    /// Top to bottom coordinate or size.
     y: i32,
 };
