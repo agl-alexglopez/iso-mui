@@ -5,6 +5,7 @@ const std = @import("std");
 const maze = @import("../maze.zig");
 const sol = @import("../solve.zig");
 
+/// When following a trail of parent points in the maze this signals the end or origin.
 const sentinel_point = maze.Point{ .r = -1, .c = -1 };
 
 /// Solves a maze with a breadth first search. Visually this is distinct from a depth first search
