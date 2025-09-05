@@ -13,7 +13,7 @@ pub fn solve(
     allocator: std.mem.Allocator,
     m: *maze.Maze,
 ) maze.MazeError!*maze.Maze {
-    var bfs: Queue = .{ .list = std.DoublyLinkedList{}, .len = 0 };
+    var bfs = Queue.init();
     var parents = std.AutoArrayHashMapUnmanaged(maze.Point, maze.Point).empty;
     defer {
         parents.deinit(allocator);
@@ -83,7 +83,16 @@ const Queue = struct {
     list: std.DoublyLinkedList,
     len: usize,
 
-    pub fn deinit(self: *Queue, allocator: std.mem.Allocator) void {
+    /// Initialize an empty queue.
+    fn init() Queue {
+        return Queue{
+            .list = std.DoublyLinkedList{},
+            .len = 0,
+        };
+    }
+
+    /// Free all elements in the queue and set the queue to be undefined.
+    fn deinit(self: *Queue, allocator: std.mem.Allocator) void {
         while (self.len != 0) : (self.len -= 1) {
             const handle = self.list.popFirst() orelse return;
             const elem: *QueueElem = @fieldParentPtr("e", handle);
@@ -92,24 +101,27 @@ const Queue = struct {
         self.* = undefined;
     }
 
-    pub fn queue(self: *Queue, p: maze.Point, allocator: std.mem.Allocator) maze.MazeError!void {
+    /// Queues an element at the back of the queue or fails with an allocation error.
+    fn queue(self: *Queue, p: maze.Point, allocator: std.mem.Allocator) maze.MazeError!void {
         var node: *QueueElem = allocator.create(QueueElem) catch return maze.MazeError.AllocFail;
         node.point = p;
         self.list.append(&node.e);
         self.len += 1;
     }
 
-    pub fn isEmpty(self: *const Queue) bool {
+    /// Returns true if the number of elements stores in the queue is 0.
+    fn isEmpty(self: *const Queue) bool {
         return self.len == 0;
     }
 
+    /// Pops from the front of the queue or returns a logic error if the queue is empty.
     fn dequeue(self: *Queue) maze.MazeError!*QueueElem {
         const handle: ?*std.DoublyLinkedList.Node = self.list.popFirst();
         if (handle) |h| {
             self.len -= 1;
             return @fieldParentPtr("e", h);
         }
-        return maze.MazeError.AllocFail;
+        return maze.MazeError.LogicFail;
     }
 };
 
