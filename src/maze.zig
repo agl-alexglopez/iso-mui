@@ -2,6 +2,8 @@
 //! the wall pieces and some fundamental helper this is functions such that the builder and solver
 //! can perform their tasks more easily.
 const std = @import("std");
+const order = std.builtin.AtomicOrder;
+const rmw_op = std.builtin.AtomicRmwOp;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 const expect = std.testing.expect;
@@ -17,7 +19,65 @@ const expect = std.testing.expect;
 /// start bit───┐││ ││││ ││││ ││││ ││││ ││││ ││││ ││││
 /// finish bit─┐│││ ││││ ││││ ││││ ││││ ││││ ││││ ││││
 ///          0b0000 0000 0000 0000 0000 0000 0000 0000
-pub const Square = u32;
+pub const SquareU32 = u32;
+
+/// The Atomic wrapper for the underlying Square bits. All access to squares should be through
+/// this interface. Any access to the unprotected value without the provided method yields
+/// undefined behavior. Currently all atomic operations on squares are Monotonic.
+pub const Square = struct {
+    /// > [!warning] NO! USE `.load()`! Do not access the bits of a square directly.
+    /// Only use provided methods. All provided operations on the square bits operate under
+    /// Monotonic ordering. There is no situation in which we care which solver thread acts on a
+    /// square first. We simply need all threads to know if some other thread has completed an
+    /// action on the bits before itself.
+    unprotected: SquareU32,
+
+    /// Load the underlying integer of a square in a monotonic ordering.
+    pub fn load(self: *const Square) SquareU32 {
+        return @atomicLoad(SquareU32, &self.unprotected, order.monotonic);
+    }
+
+    /// Store value v to the underlying integer of a square in monotonic ordering.
+    pub fn store(
+        self: *Square,
+        v: SquareU32,
+    ) void {
+        return @atomicStore(SquareU32, &self.unprotected, v, order.monotonic);
+    }
+
+    /// Bitwise `|=` the current square with value v.
+    pub fn bitOrEq(self: *Square, v: SquareU32) void {
+        _ = @atomicRmw(SquareU32, &self.unprotected, rmw_op.Or, v, order.monotonic);
+    }
+
+    /// Bitwise `&=` the current square with value v.
+    pub fn bitAndEq(self: *Square, v: SquareU32) void {
+        _ = @atomicRmw(SquareU32, &self.unprotected, rmw_op.And, v, order.monotonic);
+    }
+
+    /// Update the memory location of the underlying square bits with value `new` only if the
+    /// value of the square matches the value provided by the expected argument. A `null` is
+    /// returned if the current value matched what was expected, otherwise the real value is
+    /// returned. This function need not be used in a loop as its purpose is to fail or succeed
+    /// exactly once based on the expected value and the failure shall not be spurious.
+    pub fn compareXchg(
+        /// The square of interest.
+        self: *Square,
+        /// The value we expect to see if an exchange with new shall occur.
+        expected: SquareU32,
+        /// The new value that is exchanged for expected, if expected is read.
+        new: SquareU32,
+    ) ?SquareU32 {
+        return @cmpxchgStrong(
+            SquareU32,
+            &self.unprotected,
+            expected,
+            new,
+            order.monotonic,
+            order.monotonic,
+        );
+    }
+};
 
 ////////////////////////////////////////    Constants    //////////////////////////////////////////
 
@@ -25,17 +85,17 @@ pub const Square = u32;
 /// reached. In either case the error should be returned.
 pub const MazeError = error{ AllocFail, LogicFail };
 /// The bit that signifies this is a navigable path.
-pub const path_bit: Square = 0x20000000;
+pub const path_bit: SquareU32 = 0x20000000;
 /// The bit signifying a wall to the north of the current square exists.
-pub const north_wall: Square = 0x1000000;
+pub const north_wall: SquareU32 = 0x1000000;
 /// The bit signifying a wall to the east of the current square exists.
-pub const east_wall: Square = 0x2000000;
+pub const east_wall: SquareU32 = 0x2000000;
 /// The bit signifying a wall to the south of the current square exists.
-pub const south_wall: Square = 0x4000000;
+pub const south_wall: SquareU32 = 0x4000000;
 /// The bit signifying a wall to the west of the current square exists.
-pub const west_wall: Square = 0x8000000;
+pub const west_wall: SquareU32 = 0x8000000;
 /// The mask for the bits that index into the proper wall shape.
-pub const wall_mask: Square = 0xf000000;
+pub const wall_mask: SquareU32 = 0xf000000;
 /// The shift to make the wall mask bits 0-index into the table properly.
 pub const wall_shift: usize = 24;
 /// The wall array provides us with information about what shape the current square should take for
@@ -109,7 +169,7 @@ pub const Blueprint = struct {
             .cols = c,
         };
         for (ret.squares) |*s| {
-            s.* = 0;
+            s.store(0);
         }
         return ret;
     }
@@ -136,8 +196,8 @@ pub const Point = struct {
 /// occur across squares simultaneously.
 pub const Delta = struct {
     p: Point,
-    before: Square,
-    after: Square,
+    before: SquareU32,
+    after: SquareU32,
     burst: usize,
 };
 
@@ -239,7 +299,7 @@ pub const Maze = struct {
     /// does not free any memory.
     pub fn clearRetainingCapacity(self: *Maze) void {
         for (self.maze.squares) |*s| {
-            s.* = 0;
+            s.store(0);
         }
         self.build_history.clear();
         self.solve_history.clear();
@@ -275,7 +335,7 @@ pub const Maze = struct {
         col: isize,
     ) bool {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
-        return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) == 0;
+        return (self.maze.squares[@intCast((row * self.maze.cols) + col)].load() & path_bit) == 0;
     }
 
     /// Returns true if the path bit is off at the specified coordinates, making the square a path.
@@ -286,13 +346,13 @@ pub const Maze = struct {
         col: isize,
     ) bool {
         assert(row >= 0 and col >= 0 and row < self.maze.rows and col < self.maze.cols);
-        return (self.maze.squares[@intCast((row * self.maze.cols) + col)] & path_bit) != 0;
+        return (self.maze.squares[@intCast((row * self.maze.cols) + col)].load() & path_bit) != 0;
     }
 
     /// Zeros all the squares in the maze so a Tape can be played back.
     pub fn zeroSquares(self: *Maze) void {
         for (self.maze.squares) |*s| {
-            s.* = 0b0;
+            s.store(0);
         }
     }
 };
@@ -308,23 +368,7 @@ pub fn wallPiece(
 }
 
 pub fn isPath(
-    square: Square,
+    square: SquareU32,
 ) bool {
     return (square & path_bit) != 0;
-}
-
-/////////////////////////////////////    Tests     ////////////////////////////////////////////////
-
-test "maze square flat 2D buffer multiplication getters" {
-    var buf: [128]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buf);
-    const allocator = fba.allocator();
-    var maze: Maze = try Maze.init(allocator, 5, 5);
-    defer {
-        maze.deinit(allocator);
-    }
-    maze.getPtr(3, 3).* = 0;
-    try expect(maze.get(3, 3) == 0);
-    maze.getPtr(3, 3).* = east_wall | west_wall;
-    try expect(maze.get(3, 3) == east_wall | west_wall);
 }

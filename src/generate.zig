@@ -18,19 +18,19 @@ const std = @import("std");
 const maze = @import("maze.zig");
 
 /// Any builders that choose to cache seen squares in place can use this bit.
-pub const builder_bit: maze.Square = 0b0001_0000_0000_0000_0000_0000_0000_0000;
+pub const builder_bit: maze.SquareU32 = 0b0001_0000_0000_0000_0000_0000_0000_0000;
 /// The number of cardinal directions in a square grid.
 pub const num_directions: usize = 4;
 /// The mask we can use for backtracking markers.
-pub const backtrack_mask: maze.Square = 0b1111;
+pub const backtrack_mask: maze.SquareU32 = 0b1111;
 /// The bit value for indicating return North.
-pub const from_north: maze.Square = 0b0001;
+pub const from_north: maze.SquareU32 = 0b0001;
 /// The bit value for indicating return East.
-pub const from_east: maze.Square = 0b0010;
+pub const from_east: maze.SquareU32 = 0b0010;
 /// The bit value for indicating return South.
-pub const from_south: maze.Square = 0b0011;
+pub const from_south: maze.SquareU32 = 0b0011;
 /// The bit value for indicating return West.
-pub const from_west: maze.Square = 0b0100;
+pub const from_west: maze.SquareU32 = 0b0100;
 
 /// While generating mazes we operate in steps of two so offsets are in steps of 2
 pub const generator_cardinals: [4]maze.Point = .{
@@ -93,7 +93,7 @@ pub fn isBuilt(
     /// [in] The point in the maze to check. Checked in debug.
     p: maze.Point,
 ) bool {
-    return (m.get(p.r, p.c) & builder_bit) != 0;
+    return (m.get(p.r, p.c).load() & builder_bit) != 0;
 }
 
 /// Chooses an un-built point from the current starting row and returns it. The point may be odd
@@ -122,7 +122,7 @@ pub fn choosePointFromRow(
     return null;
 }
 
-pub fn hasBacktracking(square: maze.Square) bool {
+pub fn hasBacktracking(square: maze.SquareU32) bool {
     return (square & backtrack_mask) != 0;
 }
 
@@ -138,7 +138,7 @@ pub fn canBuildNewSquare(
         next.r < m.maze.rows - 1 and
         next.c > 0 and
         next.c < m.maze.cols - 1 and
-        (m.get(next.r, next.c) & builder_bit) == 0;
+        (m.get(next.r, next.c).load() & builder_bit) == 0;
 }
 
 /// Prepares the maze for a path carving algorithm. All squares will become walls. Because the
@@ -166,7 +166,7 @@ pub fn buildWallPerimeter(
     for (0..@intCast(m.maze.rows)) |r| {
         for (0..@intCast(m.maze.cols)) |c| {
             if ((c == 0) or (c == m.maze.cols - 1) or (r == 0) or (r == m.maze.rows - 1)) {
-                m.getPtr(@intCast(r), @intCast(c)).* |= builder_bit;
+                m.getPtr(@intCast(r), @intCast(c)).bitOrEq(builder_bit);
                 burst += try buildPerimeterPiece(m, .{ .r = @intCast(r), .c = @intCast(c) }, allocator);
             } else {
                 burst += try buildPath(allocator, m, .{ .r = @intCast(r), .c = @intCast(c) });
@@ -185,7 +185,7 @@ pub fn buildWall(
     p: maze.Point,
     allocator: std.mem.Allocator,
 ) !void {
-    var wall: maze.Square = 0b0;
+    var wall: maze.SquareU32 = 0b0;
     if (p.r > 0) {
         wall |= maze.north_wall;
     }
@@ -207,7 +207,7 @@ pub fn buildWall(
             .burst = 1,
         },
     );
-    m.getPtr(p.r, p.c).* = wall;
+    m.getPtr(p.r, p.c).store(wall);
 }
 
 pub fn buildPerimeterPiece(
@@ -217,9 +217,9 @@ pub fn buildPerimeterPiece(
 ) !usize {
     var deltas: [5]maze.Delta = undefined;
     var burst: usize = 1;
-    var wall: maze.Square = 0b0;
+    var wall: maze.SquareU32 = 0b0;
     if (p.r > 0 and m.isWall(p.r - 1, p.c)) {
-        const square = m.get(p.r - 1, p.c);
+        const square = m.get(p.r - 1, p.c).load();
         deltas[burst] = .{
             .p = .{
                 .r = p.r - 1,
@@ -231,10 +231,10 @@ pub fn buildPerimeterPiece(
         };
         burst += 1;
         wall |= maze.north_wall;
-        m.getPtr(p.r - 1, p.c).* |= maze.south_wall;
+        m.getPtr(p.r - 1, p.c).bitOrEq(maze.south_wall);
     }
     if (p.r + 1 < m.maze.rows and m.isWall(p.r + 1, p.c)) {
-        const square = m.get(p.r + 1, p.c);
+        const square = m.get(p.r + 1, p.c).load();
         deltas[burst] = .{
             .p = .{
                 .r = p.r + 1,
@@ -246,10 +246,10 @@ pub fn buildPerimeterPiece(
         };
         burst += 1;
         wall |= maze.south_wall;
-        m.getPtr(p.r + 1, p.c).* |= maze.north_wall;
+        m.getPtr(p.r + 1, p.c).bitOrEq(maze.north_wall);
     }
     if (p.c > 0 and m.isWall(p.r, p.c - 1)) {
-        const square = m.get(p.r, p.c - 1);
+        const square = m.get(p.r, p.c - 1).load();
         deltas[burst] = .{
             .p = .{
                 .r = p.r,
@@ -261,10 +261,10 @@ pub fn buildPerimeterPiece(
         };
         burst += 1;
         wall |= maze.west_wall;
-        m.getPtr(p.r, p.c - 1).* |= maze.east_wall;
+        m.getPtr(p.r, p.c - 1).bitOrEq(maze.east_wall);
     }
     if (p.c + 1 < m.maze.cols and m.isWall(p.r, p.c + 1)) {
-        const square = m.get(p.r, p.c + 1);
+        const square = m.get(p.r, p.c + 1).load();
         deltas[burst] = .{
             .p = .{
                 .r = p.r,
@@ -276,9 +276,9 @@ pub fn buildPerimeterPiece(
         };
         burst += 1;
         wall |= maze.east_wall;
-        m.getPtr(p.r, p.c + 1).* |= maze.west_wall;
+        m.getPtr(p.r, p.c + 1).bitOrEq(maze.west_wall);
     }
-    const before: maze.Square = m.get(p.r, p.c);
+    const before: maze.SquareU32 = m.get(p.r, p.c).load();
     deltas[0] = .{
         .p = p,
         .before = before,
@@ -286,7 +286,7 @@ pub fn buildPerimeterPiece(
         .burst = burst,
     };
     deltas[burst - 1].burst = burst;
-    m.getPtr(p.r, p.c).* |= (before & ~maze.path_bit) | wall;
+    m.getPtr(p.r, p.c).bitOrEq((before & ~maze.path_bit) | wall);
     try m.build_history.recordBurst(allocator, deltas[0..burst]);
     return burst;
 }
@@ -301,56 +301,56 @@ pub fn buildPath(
 ) !usize {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
-    var square = m.get(p.r, p.c);
+    var square = m.get(p.r, p.c).load();
     wall_changes[0] = .{
         .p = p,
         .before = square,
         .after = (square & ~maze.wall_mask) | maze.path_bit,
         .burst = burst,
     };
-    m.getPtr(p.r, p.c).* = wall_changes[0].after;
+    m.getPtr(p.r, p.c).store(wall_changes[0].after);
     if (p.r > 0) {
-        square = m.get(p.r - 1, p.c);
+        square = m.get(p.r - 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{ .r = p.r - 1, .c = p.c },
             .before = square,
             .after = square & ~maze.south_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r - 1, p.c).* = wall_changes[burst].after;
+        m.getPtr(p.r - 1, p.c).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.r + 1 < m.maze.rows) {
-        square = m.get(p.r + 1, p.c);
+        square = m.get(p.r + 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{ .r = p.r + 1, .c = p.c },
             .before = square,
             .after = square & ~maze.north_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r + 1, p.c).* = wall_changes[burst].after;
+        m.getPtr(p.r + 1, p.c).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.c > 0) {
-        square = m.get(p.r, p.c - 1);
+        square = m.get(p.r, p.c - 1).load();
         wall_changes[burst] = .{
             .p = .{ .r = p.r, .c = p.c - 1 },
             .before = square,
             .after = square & ~maze.east_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r, p.c - 1).* = wall_changes[burst].after;
+        m.getPtr(p.r, p.c - 1).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.c + 1 < m.maze.cols) {
-        square = m.get(p.r, p.c + 1);
+        square = m.get(p.r, p.c + 1).load();
         wall_changes[burst] = .{
             .p = .{ .r = p.r, .c = p.c + 1 },
             .before = square,
             .after = square & ~maze.west_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r, p.c + 1).* = wall_changes[burst].after;
+        m.getPtr(p.r, p.c + 1).store(wall_changes[burst].after);
         burst += 1;
     }
     wall_changes[0].burst = burst;
@@ -365,20 +365,20 @@ pub fn carveBacktrackSquare(
     allocator: std.mem.Allocator,
     m: *maze.Maze,
     p: maze.Point,
-    backtrack: maze.Square,
+    backtrack: maze.SquareU32,
 ) maze.MazeError!void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
-    const before = m.get(p.r, p.c);
+    const before = m.get(p.r, p.c).load();
     wall_changes[0] = .{
         .p = p,
         .before = before,
         .after = (before & ~maze.wall_mask) | maze.path_bit | builder_bit | backtrack,
         .burst = burst,
     };
-    m.getPtr(p.r, p.c).* = wall_changes[0].after;
+    m.getPtr(p.r, p.c).store(wall_changes[0].after);
     if (p.r > 0) {
-        const square = m.get(p.r - 1, p.c);
+        const square = m.get(p.r - 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r - 1,
@@ -388,11 +388,11 @@ pub fn carveBacktrackSquare(
             .after = square & ~maze.south_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r - 1, p.c).* = wall_changes[burst].after;
+        m.getPtr(p.r - 1, p.c).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.r < m.maze.rows) {
-        const square = m.get(p.r + 1, p.c);
+        const square = m.get(p.r + 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r + 1,
@@ -402,11 +402,11 @@ pub fn carveBacktrackSquare(
             .after = square & ~maze.north_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r + 1, p.c).* = wall_changes[burst].after;
+        m.getPtr(p.r + 1, p.c).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.c > 0) {
-        const square = m.get(p.r, p.c - 1);
+        const square = m.get(p.r, p.c - 1).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r,
@@ -416,11 +416,11 @@ pub fn carveBacktrackSquare(
             .after = square & ~maze.east_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r, p.c - 1).* = wall_changes[burst].after;
+        m.getPtr(p.r, p.c - 1).store(wall_changes[burst].after);
         burst += 1;
     }
     if (p.c < m.maze.cols) {
-        const square = m.get(p.r, p.c + 1);
+        const square = m.get(p.r, p.c + 1).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r,
@@ -430,7 +430,7 @@ pub fn carveBacktrackSquare(
             .after = square & ~maze.west_wall,
             .burst = burst + 1,
         };
-        m.getPtr(p.r, p.c + 1).* = wall_changes[burst].after;
+        m.getPtr(p.r, p.c + 1).store(wall_changes[burst].after);
         burst += 1;
     }
     wall_changes[0].burst = burst;
@@ -447,9 +447,9 @@ pub fn recordBacktrackPath(
     cur: maze.Point,
     next: maze.Point,
 ) maze.MazeError!void {
-    try carveBacktrackSquare(allocator, m, cur, m.get(cur.r, cur.c) & backtrack_mask);
+    try carveBacktrackSquare(allocator, m, cur, m.get(cur.r, cur.c).load() & backtrack_mask);
     var wall = cur;
-    var backtracking: maze.Square = 0;
+    var backtracking: maze.SquareU32 = 0;
     if (next.r < cur.r) {
         wall.r -= 1;
         backtracking = from_south;

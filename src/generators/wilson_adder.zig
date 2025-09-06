@@ -13,7 +13,7 @@ const gen = @import("../generate.zig");
 const maze = @import("../maze.zig");
 
 /// Bit to help detect loops during random walks.
-const walk_bit: maze.Square = 0b0100_0000_0000_0000;
+const walk_bit: maze.SquareU32 = 0b0100_0000_0000_0000;
 
 /// A loop is found during a random walk when we encounter a square we previously used as a step.
 /// Loops must be erased until we return to the point of intersection that caused the loop.
@@ -55,7 +55,7 @@ pub fn generate(
     };
     var indices: [4]usize = .{ 0, 1, 2, 3 };
     walking: while (true) {
-        m.getPtr(cur.walk.r, cur.walk.c).* |= walk_bit;
+        m.getPtr(cur.walk.r, cur.walk.c).bitOrEq(walk_bit);
         rand.shuffle(usize, &indices);
         choosing_step: for (indices) |i| {
             const p = gen.generator_cardinals[i];
@@ -92,7 +92,7 @@ fn nextStep(
         if (try gen.choosePointFromRow(m, walk.prev_row_start, gen.ParityPoint.even)) |point| {
             walk.prev_row_start = point.r;
             walk.walk = point;
-            m.getPtr(walk.walk.r, walk.walk.c).* &= ~gen.backtrack_mask;
+            m.getPtr(walk.walk.r, walk.walk.c).bitAndEq(~gen.backtrack_mask);
             walk.prev = .{ .r = 0, .c = 0 };
             return true;
         }
@@ -127,7 +127,7 @@ fn eraseLoop(
     var cur = walk;
     while (!std.meta.eql(cur.walk, cur.root)) {
         // Obtain the square and backtracking directions before square cleanup occurs.
-        const cur_square = m.get(cur.walk.r, cur.walk.c);
+        const cur_square = m.get(cur.walk.r, cur.walk.c).load();
         const half_offset = backtrackHalfPoint(m, cur.walk);
         const full_offset = backtrackPoint(m, cur.walk);
         std.debug.assert(half_offset.r != 0 or half_offset.c != 0);
@@ -135,7 +135,7 @@ fn eraseLoop(
             .r = cur.walk.r + half_offset.r,
             .c = cur.walk.c + half_offset.c,
         };
-        const half_square = m.get(half_step.r, half_step.c);
+        const half_square = m.get(half_step.r, half_step.c).load();
         try m.build_history.record(
             allocator,
             .{
@@ -156,12 +156,16 @@ fn eraseLoop(
             },
         );
         // Cleanup and backtrack.
-        m.getPtr(half_step.r, half_step.c).* = ((half_square & ~gen.backtrack_mask) &
-            ~maze.wall_mask) |
-            maze.path_bit;
-        m.getPtr(cur.walk.r, cur.walk.c).* = (((cur_square & ~walk_bit) & ~maze.wall_mask) &
-            ~gen.backtrack_mask) |
-            maze.path_bit;
+        m.getPtr(half_step.r, half_step.c).store(
+            ((half_square & ~gen.backtrack_mask) &
+                ~maze.wall_mask) |
+                maze.path_bit,
+        );
+        m.getPtr(cur.walk.r, cur.walk.c).store(
+            (((cur_square & ~walk_bit) & ~maze.wall_mask) &
+                ~gen.backtrack_mask) |
+                maze.path_bit,
+        );
         std.debug.assert(full_offset.r != 0 or full_offset.c != 0);
         cur.walk.r += full_offset.r;
         cur.walk.c += full_offset.c;
@@ -176,7 +180,7 @@ fn connectWalk(
     walk: maze.Point,
 ) !void {
     var cur = walk;
-    while ((m.get(cur.r, cur.c) & gen.backtrack_mask) != 0) {
+    while ((m.get(cur.r, cur.c).load() & gen.backtrack_mask) != 0) {
         const full_offset = backtrackPoint(m, cur);
         const half_offset = backtrackHalfPoint(m, cur);
         try buildWalkLine(allocator, m, cur);
@@ -199,32 +203,40 @@ fn markWall(
     this_walk: *const RandomWalk,
 ) maze.MazeError!void {
     var wall = this_walk.walk;
-    const next_before = m.get(this_walk.next.r, this_walk.next.c);
-    var wall_before: maze.Square = undefined;
+    const next_before = m.get(this_walk.next.r, this_walk.next.c).load();
+    var wall_before: maze.SquareU32 = undefined;
     if (this_walk.next.r > this_walk.walk.r) {
         wall.r += 1;
-        wall_before = m.get(wall.r, wall.c);
-        m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_north) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_north) &
-            ~maze.path_bit;
+        wall_before = m.get(wall.r, wall.c).load();
+        m.getPtr(wall.r, wall.c).store((wall_before | gen.from_north) & ~maze.path_bit);
+        m.getPtr(this_walk.next.r, this_walk.next.c).store(
+            (next_before | gen.from_north) &
+                ~maze.path_bit,
+        );
     } else if (this_walk.next.r < this_walk.walk.r) {
         wall.r -= 1;
-        wall_before = m.get(wall.r, wall.c);
-        m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_south) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_south) &
-            ~maze.path_bit;
+        wall_before = m.get(wall.r, wall.c).load();
+        m.getPtr(wall.r, wall.c).store((wall_before | gen.from_south) & ~maze.path_bit);
+        m.getPtr(this_walk.next.r, this_walk.next.c).store(
+            (next_before | gen.from_south) &
+                ~maze.path_bit,
+        );
     } else if (this_walk.next.c < this_walk.walk.c) {
         wall.c -= 1;
-        wall_before = m.get(wall.r, wall.c);
-        m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_east) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_east) &
-            ~maze.path_bit;
+        wall_before = m.get(wall.r, wall.c).load();
+        m.getPtr(wall.r, wall.c).store((wall_before | gen.from_east) & ~maze.path_bit);
+        m.getPtr(this_walk.next.r, this_walk.next.c).store(
+            (next_before | gen.from_east) &
+                ~maze.path_bit,
+        );
     } else if (this_walk.next.c > this_walk.walk.c) {
         wall.c += 1;
-        wall_before = m.get(wall.r, wall.c);
-        m.getPtr(wall.r, wall.c).* = (wall_before | gen.from_west) & ~maze.path_bit;
-        m.getPtr(this_walk.next.r, this_walk.next.c).* = (next_before | gen.from_west) &
-            ~maze.path_bit;
+        wall_before = m.get(wall.r, wall.c).load();
+        m.getPtr(wall.r, wall.c).store((wall_before | gen.from_west) & ~maze.path_bit);
+        m.getPtr(this_walk.next.r, this_walk.next.c).store(
+            (next_before | gen.from_west) &
+                ~maze.path_bit,
+        );
     } else {
         return maze.MazeError.LogicFail;
     }
@@ -233,7 +245,7 @@ fn markWall(
         .{
             .p = wall,
             .before = wall_before,
-            .after = m.get(wall.r, wall.c),
+            .after = m.get(wall.r, wall.c).load(),
             .burst = 1,
         },
     );
@@ -242,7 +254,7 @@ fn markWall(
         .{
             .p = this_walk.next,
             .before = next_before,
-            .after = m.get(this_walk.next.r, this_walk.next.c),
+            .after = m.get(this_walk.next.r, this_walk.next.c).load(),
             .burst = 1,
         },
     );
@@ -259,10 +271,10 @@ fn buildWalkLine(
 ) !void {
     var wall_changes: [5]maze.Delta = undefined;
     var burst: usize = 1;
-    var wall: maze.Square = 0b0;
-    const square = m.get(p.r, p.c);
+    var wall: maze.SquareU32 = 0b0;
+    const square = m.get(p.r, p.c).load();
     if (p.r > 0 and m.isWall(p.r - 1, p.c)) {
-        const neighbor = m.get(p.r - 1, p.c);
+        const neighbor = m.get(p.r - 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r - 1,
@@ -273,11 +285,11 @@ fn buildWalkLine(
             .burst = burst + 1,
         };
         burst += 1;
-        m.getPtr(p.r - 1, p.c).* |= maze.south_wall;
+        m.getPtr(p.r - 1, p.c).bitOrEq(maze.south_wall);
         wall |= maze.north_wall;
     }
     if (p.r + 1 < m.maze.rows and m.isWall(p.r + 1, p.c)) {
-        const neighbor = m.get(p.r + 1, p.c);
+        const neighbor = m.get(p.r + 1, p.c).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r + 1,
@@ -288,11 +300,11 @@ fn buildWalkLine(
             .burst = burst + 1,
         };
         burst += 1;
-        m.getPtr(p.r + 1, p.c).* |= maze.north_wall;
+        m.getPtr(p.r + 1, p.c).bitOrEq(maze.north_wall);
         wall |= maze.south_wall;
     }
     if (p.c > 0 and m.isWall(p.r, p.c - 1)) {
-        const neighbor = m.get(p.r, p.c - 1);
+        const neighbor = m.get(p.r, p.c - 1).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r,
@@ -303,11 +315,11 @@ fn buildWalkLine(
             .burst = burst + 1,
         };
         burst += 1;
-        m.getPtr(p.r, p.c - 1).* |= maze.east_wall;
+        m.getPtr(p.r, p.c - 1).bitOrEq(maze.east_wall);
         wall |= maze.west_wall;
     }
     if (p.c + 1 < m.maze.cols and m.isWall(p.r, p.c + 1)) {
-        const neighbor = m.get(p.r, p.c + 1);
+        const neighbor = m.get(p.r, p.c + 1).load();
         wall_changes[burst] = .{
             .p = .{
                 .r = p.r,
@@ -318,7 +330,7 @@ fn buildWalkLine(
             .burst = burst + 1,
         };
         burst += 1;
-        m.getPtr(p.r, p.c + 1).* |= maze.west_wall;
+        m.getPtr(p.r, p.c + 1).bitOrEq(maze.west_wall);
         wall |= maze.east_wall;
     }
     wall_changes[0] = .{
@@ -329,9 +341,11 @@ fn buildWalkLine(
             ~gen.backtrack_mask,
         .burst = burst,
     };
-    m.getPtr(p.r, p.c).* = (((square | wall | gen.builder_bit) & ~maze.path_bit) &
-        ~walk_bit) &
-        ~gen.backtrack_mask;
+    m.getPtr(p.r, p.c).store(
+        (((square | wall | gen.builder_bit) & ~maze.path_bit) &
+            ~walk_bit) &
+            ~gen.backtrack_mask,
+    );
     try m.build_history.recordBurst(allocator, wall_changes[0..burst]);
 }
 
@@ -375,7 +389,7 @@ fn backtrackPoint(
     m: *const maze.Maze,
     walk: maze.Point,
 ) *const maze.Point {
-    const i = (m.get(walk.r, walk.c) & gen.backtrack_mask);
+    const i = (m.get(walk.r, walk.c).load() & gen.backtrack_mask);
     return &gen.backtracking_points[i];
 }
 
@@ -384,7 +398,7 @@ fn backtrackHalfPoint(
     m: *const maze.Maze,
     walk: maze.Point,
 ) *const maze.Point {
-    const i = (m.get(walk.r, walk.c) & gen.backtrack_mask);
+    const i = (m.get(walk.r, walk.c).load() & gen.backtrack_mask);
     return &gen.backtracking_half_points[i];
 }
 
@@ -393,5 +407,5 @@ fn foundLoop(
     m: *const maze.Maze,
     p: maze.Point,
 ) bool {
-    return (m.get(p.r, p.c) & walk_bit) != 0;
+    return (m.get(p.r, p.c).load() & walk_bit) != 0;
 }

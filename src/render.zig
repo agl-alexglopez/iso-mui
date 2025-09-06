@@ -227,7 +227,7 @@ pub const Render = struct {
         // past I had more randomized animations so I actually could make use of storing each
         // frame in each Square and progressing it as I do now. Leave this comment in case
         // future animations become randomized or otherwise benefit from bit storage.
-        const sync_frame: i32 = @intCast((m.get(0, 0) & WallAtlas.animation_mask) >>
+        const sync_frame: i32 = @intCast((m.get(0, 0).load() & WallAtlas.animation_mask) >>
             WallAtlas.animation_shift);
         while (r < m.maze.rows) : (r += 1) {
             var c: i32 = 0;
@@ -238,14 +238,14 @@ pub const Render = struct {
                 var next_frame = (sync_frame + 1) &
                     (WallAtlas.animation_mask >> WallAtlas.animation_shift);
                 next_frame = @max(next_frame, 1);
-                m.getPtr(r, c).* &= ~WallAtlas.animation_mask;
-                m.getPtr(r, c).* |= @intCast(next_frame << WallAtlas.animation_shift);
+                m.getPtr(r, c).bitAndEq(~WallAtlas.animation_mask);
+                m.getPtr(r, c).bitOrEq(@intCast(next_frame << WallAtlas.animation_shift));
             }
         }
     }
 
-    /// Progresses the tape forward and performs the required next step by adjusting maze squares.
-    /// The step may be a single square update or multiple if a burst is specified.
+    /// Progresses the tape forward and performs the required next step by adjusting maze
+    /// squares. The step may be a single square update or multiple if a burst is specified.
     fn nextMazeStep(
         m: *maze.Maze,
         t: *maze.Tape,
@@ -257,7 +257,7 @@ pub const Render = struct {
         const end = @min(t.deltas.items.len, t.i + burst);
         for (t.i..end) |i| {
             const d: maze.Delta = t.deltas.items[i];
-            m.getPtr(d.p.r, d.p.c).* = d.after;
+            m.getPtr(d.p.r, d.p.c).store(d.after);
         }
         t.i = end;
         return true;
@@ -282,7 +282,7 @@ pub const Render = struct {
         };
         while (true) {
             const d: maze.Delta = t.deltas.items[i];
-            m.getPtr(d.p.r, d.p.c).* = d.before;
+            m.getPtr(d.p.r, d.p.c).store(d.before);
             if (i == end) {
                 break;
             }
@@ -332,7 +332,7 @@ const WallAtlas = struct {
     pub const backtrack_dimensions: Xy = .{ .x = 2, .y = 2 };
 
     /// The mask to get and set animation frames from wall square high bits.
-    const animation_mask: maze.Square = 0xf00000;
+    const animation_mask: maze.SquareU32 = 0xf00000;
 
     /// The shift to change the animation bits to indexes for the texture atlas.
     const animation_shift: usize = 20;
@@ -380,7 +380,7 @@ const WallAtlas = struct {
         x_start: i32,
         y_start: i32,
     ) void {
-        const square_bits: maze.Square = m.get(r, c);
+        const square_bits: maze.SquareU32 = m.get(r, c).load();
         const isometric_x: i32 = x_start + ((c - r) *
             @divTrunc(WallAtlas.sprite_pixels.x, 2));
         const isometric_y: i32 = y_start + ((c + r) *
@@ -452,7 +452,7 @@ const WallAtlas = struct {
         x_start: i32,
         y_start: i32,
     ) void {
-        const square_bits: maze.Square = m.get(r, c);
+        const square_bits: maze.SquareU32 = m.get(r, c).load();
         const isometric_x: i32 = x_start + ((c - r) *
             @divTrunc(WallAtlas.sprite_pixels.x, 2));
         const isometric_y: i32 = y_start + ((c + r) *

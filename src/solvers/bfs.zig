@@ -26,7 +26,7 @@ pub fn solve(
     while (!bfs.isEmpty()) {
         const cur: *const QueueElem = try bfs.dequeue();
         defer allocator.destroy(cur);
-        const square: maze.Square = m.get(cur.point.r, cur.point.c);
+        const square: maze.SquareU32 = m.get(cur.point.r, cur.point.c).load();
         if (sol.isFinish(square)) {
             try m.solve_history.record(allocator, maze.Delta{
                 .p = cur.point,
@@ -34,21 +34,21 @@ pub fn solve(
                 .after = square | sol.thread_paints[0],
                 .burst = 1,
             });
-            m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
+            m.getPtr(cur.point.r, cur.point.c).bitOrEq(sol.thread_paints[0]);
             var prev = try get(&parents, cur.point);
             // For now the winning solver will just paint the bright finish block color all the
             // way back to the start. However, if we were to implement multiple solver threads
             // with their own colors, we should just record this winning path in auxiliary storage
             // and then paint this path the color of the winner when all threads finish.
             while (!std.meta.eql(prev, sentinel_point)) {
-                const s = m.get(prev.r, prev.c);
+                const s = m.get(prev.r, prev.c).load();
                 try m.solve_history.record(allocator, maze.Delta{
                     .p = prev,
                     .before = s,
                     .after = s | sol.finish_bit,
                     .burst = 1,
                 });
-                m.getPtr(prev.r, prev.c).* |= sol.finish_bit;
+                m.getPtr(prev.r, prev.c).bitOrEq(sol.finish_bit);
                 prev = try get(&parents, prev);
             }
             return m;
@@ -59,7 +59,7 @@ pub fn solve(
             .after = square | sol.thread_paints[0],
             .burst = 1,
         });
-        m.getPtr(cur.point.r, cur.point.c).* |= sol.thread_paints[0];
+        m.getPtr(cur.point.r, cur.point.c).bitOrEq(sol.thread_paints[0]);
         for (maze.cardinal_directions) |p| {
             const next = maze.Point{ .r = cur.point.r + p.r, .c = cur.point.c + p.c };
             if (m.isPath(next.r, next.c) and !parents.contains(next)) {

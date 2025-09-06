@@ -4,21 +4,21 @@
 const std = @import("std");
 const maze = @import("maze.zig");
 
-pub const start_bit: maze.Square = 0x40000000;
-pub const finish_bit: maze.Square = 0x80000000;
+pub const start_bit: maze.SquareU32 = 0x40000000;
+pub const finish_bit: maze.SquareU32 = 0x80000000;
 
 /// Here are all four tetradic colors if more solvers are added in a multithreading scheme:
 /// 0x880044, 0x766002, 0x009531, 0x010a88
-pub const thread_paints = [1]maze.Square{0x880044};
+pub const thread_paints = [1]maze.SquareU32{0x880044};
 /// The bit a thread can use to mark a square as seen.
-pub const thread_seen: maze.Square = 0x1000000;
+pub const thread_seen: maze.SquareU32 = 0x1000000;
 /// Mask for obtaining the paint of a square.
-pub const paint_mask: maze.Square = 0xFFFFFF;
-pub const red_mask: maze.Square = 0xFF0000;
-pub const red_shift: maze.Square = 16;
-pub const green_mask: maze.Square = 0xFF00;
-pub const green_shift: maze.Square = 8;
-pub const blue_mask: maze.Square = 0xFF;
+pub const paint_mask: maze.SquareU32 = 0xFFFFFF;
+pub const red_mask: maze.SquareU32 = 0xFF0000;
+pub const red_shift: maze.SquareU32 = 16;
+pub const green_mask: maze.SquareU32 = 0xFF00;
+pub const green_shift: maze.SquareU32 = 8;
+pub const blue_mask: maze.SquareU32 = 0xFF;
 
 pub const all_directions = [8]maze.Point{
     .{ .r = 1, .c = 0 },
@@ -38,23 +38,23 @@ pub fn setStartAndFinish(allocator: std.mem.Allocator, m: *maze.Maze) maze.MazeE
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
     const start: maze.Point = try randPoint(m, rand);
-    const start_square = m.get(start.r, start.c);
+    const start_square = m.get(start.r, start.c).load();
     try m.solve_history.record(allocator, maze.Delta{
         .p = start,
         .before = start_square,
         .after = start_square | start_bit,
         .burst = 1,
     });
-    m.getPtr(start.r, start.c).* |= start_bit;
+    m.getPtr(start.r, start.c).bitOrEq(start_bit);
     const finish: maze.Point = try randPoint(m, rand);
-    const finish_square = m.get(finish.r, finish.c);
+    const finish_square = m.get(finish.r, finish.c).load();
     try m.solve_history.record(allocator, maze.Delta{
         .p = finish,
         .before = finish_square,
         .after = finish_square | finish_bit,
         .burst = 1,
     });
-    m.getPtr(finish.r, finish.c).* |= finish_bit;
+    m.getPtr(finish.r, finish.c).bitOrEq(finish_bit);
     return start;
 }
 
@@ -95,24 +95,24 @@ fn isValidStartOrFinish(m: *const maze.Maze, check: maze.Point) bool {
         check.r < m.maze.rows - 1 and
         check.c > 0 and
         check.c < m.maze.cols - 1 and
-        maze.isPath(m.get(check.r, check.c)) and
-        !isStartOrFinish(m.get(check.r, check.c));
+        maze.isPath(m.get(check.r, check.c).load()) and
+        !isStartOrFinish(m.get(check.r, check.c).load());
 }
 
-pub fn isStartOrFinish(square: maze.Square) bool {
+pub fn isStartOrFinish(square: maze.SquareU32) bool {
     return (square & (start_bit | finish_bit)) != 0;
 }
 
-pub fn isFinish(square: maze.Square) bool {
+pub fn isFinish(square: maze.SquareU32) bool {
     return (square & finish_bit) != 0;
 }
 
-pub fn hasPaint(square: maze.Square) bool {
+pub fn hasPaint(square: maze.SquareU32) bool {
     return (square & paint_mask) != 0;
 }
 
 /// Returns the {r, g, b} tuple of color found at this square.
-pub fn getPaint(square: maze.Square) struct { u8, u8, u8 } {
+pub fn getPaint(square: maze.SquareU32) struct { u8, u8, u8 } {
     return .{
         @intCast((square & red_mask) >> red_shift),
         @intCast((square & green_mask) >> green_shift),

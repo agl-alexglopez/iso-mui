@@ -44,14 +44,14 @@ pub fn generate(
             }
         }
         // Backtracking.
-        const direction: maze.Square = m.get(cur.r, cur.c) & gen.backtrack_mask;
+        const direction: maze.SquareU32 = m.get(cur.r, cur.c).load() & gen.backtrack_mask;
         const half_point = gen.backtracking_half_points[@intCast(direction)];
         const half_step = maze.Point{
             .r = cur.r + half_point.r,
             .c = cur.c + half_point.c,
         };
-        const cur_square = m.get(cur.r, cur.c);
-        const half_step_square = m.get(half_step.r, half_step.c);
+        const cur_square = m.get(cur.r, cur.c).load();
+        const half_step_square = m.get(half_step.r, half_step.c).load();
         try m.build_history.record(
             allocator,
             .{
@@ -70,8 +70,8 @@ pub fn generate(
                 .burst = 1,
             },
         );
-        m.getPtr(cur.r, cur.c).* &= ~gen.backtrack_mask;
-        m.getPtr(half_step.r, half_step.c).* &= ~gen.backtrack_mask;
+        m.getPtr(cur.r, cur.c).bitAndEq(~gen.backtrack_mask);
+        m.getPtr(half_step.r, half_step.c).bitAndEq(~gen.backtrack_mask);
         const full_point = gen.backtracking_points[@intCast(direction)];
         cur.r += full_point.r;
         cur.c += full_point.c;
