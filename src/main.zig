@@ -51,8 +51,6 @@ pub fn main() !void {
     var allocator_impl = switch (builtin.mode) {
         .Debug => heap.DebugAllocator(.{
             .backing_allocator_zeroes = true,
-            .retain_metadata = true,
-            .never_unmap = true,
             .safety = true,
             .thread_safe = true,
         }){},

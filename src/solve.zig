@@ -6,12 +6,23 @@ const maze = @import("maze.zig");
 
 pub const start_bit: maze.SquareU32 = 0x40000000;
 pub const finish_bit: maze.SquareU32 = 0x80000000;
+pub const no_winner: maze.SquareU32 = std.math.maxInt(u32);
+pub const thread_count: usize = 4;
 
 /// Here are all four tetradic colors if more solvers are added in a multithreading scheme:
-/// 0x880044, 0x766002, 0x009531, 0x010a88
-pub const thread_paints = [1]maze.SquareU32{0x880044};
-/// The bit a thread can use to mark a square as seen.
-pub const thread_seen: maze.SquareU32 = 0x1000000;
+pub const thread_paints = [thread_count]maze.SquareU32{
+    0x880_044,
+    0x766_002,
+    0x009_531,
+    0x010_A88,
+};
+/// Every thread can cache a square as seen individually.
+pub const thread_cache_bits = [thread_count]maze.SquareU32{
+    0x1_000_000,
+    0x2_000_000,
+    0x4_000_000,
+    0x8_000_000,
+};
 /// Mask for obtaining the paint of a square.
 pub const paint_mask: maze.SquareU32 = 0xFFFFFF;
 pub const red_mask: maze.SquareU32 = 0xFF0000;
