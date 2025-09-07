@@ -6,46 +6,9 @@ const zthreads = std.Thread;
 const maze = @import("../maze.zig");
 const sol = @import("../solve.zig");
 
-/// It may seem redundant to have a monitor in addition to atomic maze squares but consider that
-/// we must protect the maze Tape for the solve history with mutual exclusion. We benefit from
-/// atomics by not having to lock the maze for every little check that a thread might peform
-/// that is unrelated to recording history (checking if a square is a path or wall, checking
-/// if it is seen, etc).
+/// Runs 4 threads with a depth first search stopping all threads once one successfully finds
+/// the finish.
 ///
-/// Then, when history or critical visual updates must occur, we can use the lock to protect
-/// the tape and ordering of our painting.
-const Monitor = struct {
-    /// The lock for protecting painting and history update steps.
-    lock: zthreads.Mutex,
-    /// The monitor takes ownership of the maze temporarily for updates to its Tape.
-    maze: *maze.Maze,
-    /// Every thread has access to their own start, no locking required.
-    starts: [sol.thread_count]maze.Point = undefined,
-    /// Protection is handled by this being an atomic type.
-    winning_thread_id: maze.Square = undefined,
-    /// Each thread has their own path stack. Allocator provided must be thread safe.
-    thread_paths: [sol.thread_count]std.array_list.Aligned(maze.Point, null),
-    /// Threads can only execute functions that return void so they can leave errors here.
-    thread_errors: [sol.thread_count]?maze.MazeError,
-
-    fn init(m: *maze.Maze) Monitor {
-        var res = Monitor{
-            .lock = .{},
-            .maze = m,
-            .thread_paths = .{std.array_list.Aligned(maze.Point, null){}} ** sol.thread_count,
-            .thread_errors = .{null} ** sol.thread_count,
-        };
-        res.winning_thread_id.store(sol.no_winner);
-        return res;
-    }
-
-    fn deinit(self: *Monitor, allocator: std.mem.Allocator) void {
-        for (0..self.thread_paths.len) |i| {
-            self.thread_paths[i].deinit(allocator);
-        }
-    }
-};
-
 /// Expects a thread safe allocator and maze to solve.
 pub fn solve(
     allocator: std.mem.Allocator,
@@ -95,7 +58,9 @@ pub fn solve(
     return m;
 }
 
-pub fn solver_thread(
+/// The depth first search a thread runs to seek out the finish. Each thread is biased to head in
+/// a unique cardinal direction first.
+fn solver_thread(
     allocator: std.mem.Allocator,
     monitor: *Monitor,
     id: maze.SquareU32,
@@ -113,21 +78,6 @@ pub fn solver_thread(
         if (sol.isFinish(monitor.maze.get(cur.r, cur.c).load())) {
             _ = monitor.winning_thread_id.compareXchg(sol.no_winner, id);
             _ = dfs.pop();
-            {
-                monitor.lock.lock();
-                defer monitor.lock.unlock();
-                const s: maze.SquareU32 = monitor.maze.get(cur.r, cur.c).load();
-                monitor.maze.solve_history.record(allocator, maze.Delta{
-                    .p = cur,
-                    .before = s,
-                    .after = s | sol.thread_paints[id],
-                    .burst = 1,
-                }) catch |e| {
-                    monitor.thread_errors[id] = e;
-                    return;
-                };
-                monitor.maze.getPtr(cur.r, cur.c).bitOrEq(sol.thread_paints[id]);
-            }
             return;
         }
         {
@@ -149,7 +99,7 @@ pub fn solver_thread(
         }
         // Bias threads toward unique directions for better visual spread.
         var i: usize = id;
-        for (0..sol.thread_count) |_| {
+        for (0..maze.cardinal_directions.len) |_| {
             const p = maze.cardinal_directions[i];
             i = (i + 1) % maze.cardinal_directions.len;
             const next = maze.Point{ .r = cur.r + p.r, .c = cur.c + p.c };
@@ -180,6 +130,46 @@ pub fn solver_thread(
         _ = dfs.pop();
     }
 }
+
+/// It may seem redundant to have a monitor in addition to atomic maze squares but consider that
+/// we must protect the maze Tape for the solve history with mutual exclusion. We benefit from
+/// atomics by not having to lock the maze for every little check that a thread might peform
+/// that is unrelated to recording history (checking if a square is a path or wall, checking
+/// if it is seen, etc).
+///
+/// Then, when history or critical visual updates must occur, we can use the lock to protect
+/// the tape and ordering of our painting.
+const Monitor = struct {
+    /// The lock for protecting painting and history update steps.
+    lock: zthreads.Mutex,
+    /// The monitor takes ownership of the maze temporarily for updates to its Tape.
+    maze: *maze.Maze,
+    /// Every thread has access to their own start, no locking required.
+    starts: [sol.thread_count]maze.Point = undefined,
+    /// Protection is handled by this being an atomic type.
+    winning_thread_id: maze.Square = undefined,
+    /// Each thread has their own path stack. Allocator provided must be thread safe.
+    thread_paths: [sol.thread_count]std.array_list.Aligned(maze.Point, null),
+    /// Threads can only execute functions that return void so they can leave errors here.
+    thread_errors: [sol.thread_count]?maze.MazeError,
+
+    fn init(m: *maze.Maze) Monitor {
+        var res = Monitor{
+            .lock = .{},
+            .maze = m,
+            .thread_paths = .{std.array_list.Aligned(maze.Point, null){}} ** sol.thread_count,
+            .thread_errors = .{null} ** sol.thread_count,
+        };
+        res.winning_thread_id.store(sol.no_winner);
+        return res;
+    }
+
+    fn deinit(self: *Monitor, allocator: std.mem.Allocator) void {
+        for (0..self.thread_paths.len) |i| {
+            self.thread_paths[i].deinit(allocator);
+        }
+    }
+};
 
 fn push(
     allocator: std.mem.Allocator,
