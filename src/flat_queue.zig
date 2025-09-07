@@ -8,15 +8,20 @@ const Allocator = std.mem.Allocator;
 const check = std.testing;
 
 pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
+    if (alignment) |a| {
+        if (a.toByteUnits() == @alignOf(T)) {
+            return FlatQueue(T, null);
+        }
+    }
     return struct {
         const Self = @This();
         const Slice = if (alignment) |a| ([]align(a.toByteUnits()) T) else []T;
-        buf: Slice,
+        items: Slice = &[_]T{},
         capacity: usize = 0,
         front: usize = 0,
 
         pub const empty: Self = .{
-            .buf = &.{},
+            .items = &.{},
             .front = 0,
         };
 
@@ -25,7 +30,7 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             gpa: Allocator,
         ) void {
             if (self.capacity != 0) {
-                gpa.free(self.buf);
+                gpa.free(self.allocatedSlice());
             }
             self.* = Self.empty;
         }
@@ -35,7 +40,7 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             gpa: Allocator,
             to_add: usize,
         ) Allocator.Error!void {
-            const need = self.buf.len + to_add;
+            const need = self.items.len + to_add;
             if (self.capacity >= need) {
                 return;
             }
@@ -47,45 +52,41 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             gpa: Allocator,
             item: T,
         ) Allocator.Error!void {
-            if (self.buf.len == self.capacity) {
+            if (self.items.len == self.capacity) {
                 const newcap = if (self.capacity != 0) self.capacity * 2 else 8;
                 try self.growAssumeGreater(gpa, newcap);
             }
-            self.buf.ptr[self.nextBackSlotAssumeCapacity()] = item;
-            self.buf.len += 1;
+            self.items.ptr[self.nextBackSlotAssumeCapacity()] = item;
+            self.items.len += 1;
         }
 
         pub fn popFirst(self: *Self) ?T {
-            if (self.buf.len == 0) {
+            if (self.items.len == 0) {
                 return null;
             }
-            const ret = self.buf.ptr[self.front];
+            const ret = self.items.ptr[self.front];
             self.front = (self.front + 1) % self.capacity;
-            self.buf.len -= 1;
+            self.items.len -= 1;
             return ret;
         }
 
         pub fn first(self: *const Self) ?*T {
-            return if (self.buf.len == 0)
+            return if (self.items.len == 0)
                 null
             else
-                &self.buf.ptr[self.front];
+                &self.items.ptr[self.front];
         }
 
         pub fn len(self: *const Self) usize {
-            return self.buf.len;
+            return self.items.len;
         }
 
         pub fn isEmpty(self: *const Self) bool {
-            return self.buf.len == 0;
+            return self.items.len == 0;
         }
 
         fn nextBackSlotAssumeCapacity(self: *const Self) usize {
-            return (self.front + self.buf.len) % self.capacity;
-        }
-
-        fn lastSlotAssumeCapacity(self: *const Self) usize {
-            return (self.front + self.buf.len - 1) % self.capacity;
+            return (self.front + self.items.len) % self.capacity;
         }
 
         fn growAssumeGreater(
@@ -93,34 +94,52 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             gpa: Allocator,
             greater: usize,
         ) Allocator.Error!void {
-            const old_len = self.buf.len;
-            var new_mem: []T = try gpa.alloc(T, greater);
+            const new_mem = try gpa.alignedAlloc(T, alignment, greater);
             if (self.capacity != 0) {
-                const first_chunk = @min(old_len, self.capacity - self.front);
+                const old_mem = self.allocatedSlice();
+                const first_chunk = @min(self.items.len, self.capacity - self.front);
                 @memcpy(
                     new_mem[0..first_chunk],
-                    self.buf[self.front..(self.front + first_chunk)],
+                    self.items[self.front..(self.front + first_chunk)],
                 );
-                if (first_chunk < self.capacity) {
-                    const second_chunk = old_len - first_chunk;
+                const second_chunk = self.items.len - first_chunk;
+                if (second_chunk != 0) {
                     @memcpy(
                         new_mem[first_chunk..(first_chunk + second_chunk)],
-                        self.buf[0..second_chunk],
+                        self.items[0..second_chunk],
                     );
                 }
+                gpa.free(old_mem);
             }
-            self.capacity = greater;
+            self.items.ptr = new_mem.ptr;
+            self.capacity = new_mem.len;
             self.front = 0;
-            gpa.free(self.buf);
-            self.buf = new_mem;
-            self.buf.len = old_len;
+        }
+
+        fn allocatedSlice(self: *const Self) Slice {
+            return self.items.ptr[0..self.capacity];
         }
     };
 }
 
 test "construct" {
     const q = FlatQueue(u32, null).empty;
-    try check.expect(q.front == 0 and q.buf.len == 0 and q.capacity == 0);
+    try check.expect(q.front == 0 and q.items.len == 0 and q.capacity == 0);
+}
+
+test "init deinit empty" {
+    var alloc = std.heap.DebugAllocator(.{}){};
+    const gpa = alloc.allocator();
+    var q = FlatQueue(u32, null).empty;
+    q.deinit(gpa);
+}
+
+test "init deinit one resize" {
+    var alloc = std.heap.DebugAllocator(.{}){};
+    const gpa = alloc.allocator();
+    var q = FlatQueue(u32, null).empty;
+    try q.append(gpa, 19);
+    q.deinit(gpa);
 }
 
 test "append" {
