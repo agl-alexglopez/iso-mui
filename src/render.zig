@@ -618,7 +618,7 @@ const Menu = struct {
     const max_algorithm_dt = 1.0;
 
     /// The fastest animation possible for our algorithms.
-    const min_algorithm_dt = 0.001;
+    const min_algorithm_dt = 0.0001;
 
     // The starting animation speed.
     const default_dt = 0.3;
