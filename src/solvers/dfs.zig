@@ -45,6 +45,7 @@ pub fn solve(
             return maze.MazeError.AllocFail;
         };
     }
+    // Don't let the current thread go to waste.
     solver_thread(allocator, &monitor, sol.thread_count - 1);
     for (0..sol.thread_count - 1) |i| {
         threads[i].join();
