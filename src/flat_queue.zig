@@ -7,6 +7,8 @@ const Alignment = std.mem.Alignment;
 const Allocator = std.mem.Allocator;
 const check = std.testing;
 
+const start_cap = 8;
+
 pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
     if (alignment) |a| {
         if (a.toByteUnits() == @alignOf(T)) {
@@ -53,7 +55,7 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             item: T,
         ) Allocator.Error!void {
             if (self.items.len == self.capacity) {
-                const newcap = if (self.capacity != 0) self.capacity * 2 else 8;
+                const newcap = if (self.capacity != 0) self.capacity * 2 else start_cap;
                 try self.growAssumeGreater(gpa, newcap);
             }
             self.items.ptr[self.nextBackSlotAssumeCapacity()] = item;
@@ -131,15 +133,25 @@ test "init deinit empty" {
     var alloc = std.heap.DebugAllocator(.{}){};
     const gpa = alloc.allocator();
     var q = FlatQueue(u32, null).empty;
-    q.deinit(gpa);
+    defer q.deinit(gpa);
 }
 
 test "init deinit one resize" {
     var alloc = std.heap.DebugAllocator(.{}){};
     const gpa = alloc.allocator();
     var q = FlatQueue(u32, null).empty;
+    defer q.deinit(gpa);
     try q.append(gpa, 19);
-    q.deinit(gpa);
+}
+
+test "init deinit two resizes" {
+    var alloc = std.heap.DebugAllocator(.{}){};
+    const gpa = alloc.allocator();
+    var q = FlatQueue(usize, null).empty;
+    defer q.deinit(gpa);
+    for (0..start_cap + 1) |i| {
+        try q.append(gpa, i);
+    }
 }
 
 test "append" {
