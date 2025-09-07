@@ -24,10 +24,10 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             self: *Self,
             gpa: Allocator,
         ) void {
-            gpa.free(self.buf);
-            self.capacity = 0;
-            self.front = 0;
-            self.* = undefined;
+            if (self.capacity != 0) {
+                gpa.free(self.buf);
+            }
+            self.* = Self.empty;
         }
 
         pub fn reserve(
@@ -96,15 +96,16 @@ pub fn FlatQueue(comptime T: type, comptime alignment: ?Alignment) type {
             const old_len = self.buf.len;
             var new_mem: []T = try gpa.alloc(T, greater);
             if (self.capacity != 0) {
-                const first_chunk = @min(self.buf.len, self.capacity - self.front);
+                const first_chunk = @min(old_len, self.capacity - self.front);
                 @memcpy(
-                    new_mem.ptr,
-                    self.buf.ptr[self.front..(self.front + first_chunk)],
+                    new_mem[0..first_chunk],
+                    self.buf[self.front..(self.front + first_chunk)],
                 );
                 if (first_chunk < self.capacity) {
+                    const second_chunk = old_len - first_chunk;
                     @memcpy(
-                        new_mem.ptr[first_chunk..],
-                        self.buf.ptr[0..(self.buf.len - first_chunk)],
+                        new_mem[first_chunk..(first_chunk + second_chunk)],
+                        self.buf[0..second_chunk],
                     );
                 }
             }
