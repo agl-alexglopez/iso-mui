@@ -53,6 +53,12 @@ pub fn solve(
 ) maze.MazeError!*maze.Maze {
     var monitor = Monitor.init(m);
     defer monitor.deinit(allocator);
+    for (0..monitor.thread_paths.len) |i| {
+        monitor.thread_paths[i].ensureTotalCapacity(
+            allocator,
+            1024,
+        ) catch return maze.MazeError.AllocFail;
+    }
     const start: maze.Point = try sol.setStartAndFinish(allocator, m);
     monitor.starts = .{start} ** sol.thread_count;
     var threads: [sol.thread_count]std.Thread = undefined;

@@ -1,6 +1,7 @@
 //! This file implements a breadth first search to solve a randomly generated maze starting at a
 //! random start point and ending at a random finish point within maze boundaries.
 const std = @import("std");
+const q = @import("../flat_queue.zig");
 
 const maze = @import("../maze.zig");
 const sol = @import("../solve.zig");
@@ -14,7 +15,7 @@ pub fn solve(
     allocator: std.mem.Allocator,
     m: *maze.Maze,
 ) maze.MazeError!*maze.Maze {
-    var bfs = Queue.init();
+    var bfs = q.FlatQueue(maze.Point, null).empty;
     var parents = std.AutoArrayHashMapUnmanaged(maze.Point, maze.Point).empty;
     defer {
         parents.deinit(allocator);
@@ -22,20 +23,19 @@ pub fn solve(
     }
     const start: maze.Point = try sol.setStartAndFinish(allocator, m);
     try put(allocator, &parents, start, sentinel_point);
-    try bfs.queue(start, allocator);
+    try queue(&bfs, allocator, start);
     while (!bfs.isEmpty()) {
-        const cur: *const QueueElem = try bfs.dequeue();
-        defer allocator.destroy(cur);
-        const square: maze.SquareU32 = m.get(cur.point.r, cur.point.c).load();
+        const cur: maze.Point = try dequeue(&bfs);
+        const square: maze.SquareU32 = m.get(cur.r, cur.c).load();
         if (sol.isFinish(square)) {
             try m.solve_history.record(allocator, maze.Delta{
-                .p = cur.point,
+                .p = cur,
                 .before = square,
                 .after = square | sol.thread_paints[0],
                 .burst = 1,
             });
-            m.getPtr(cur.point.r, cur.point.c).bitOrEq(sol.thread_paints[0]);
-            var prev = try get(&parents, cur.point);
+            m.getPtr(cur.r, cur.c).bitOrEq(sol.thread_paints[0]);
+            var prev = try get(&parents, cur);
             // For now the winning solver will just paint the bright finish block color all the
             // way back to the start. However, if we were to implement multiple solver threads
             // with their own colors, we should just record this winning path in auxiliary storage
@@ -54,77 +54,39 @@ pub fn solve(
             return m;
         }
         try m.solve_history.record(allocator, maze.Delta{
-            .p = cur.point,
+            .p = cur,
             .before = square,
             .after = square | sol.thread_paints[0],
             .burst = 1,
         });
-        m.getPtr(cur.point.r, cur.point.c).bitOrEq(sol.thread_paints[0]);
+        m.getPtr(cur.r, cur.c).bitOrEq(sol.thread_paints[0]);
         for (maze.cardinal_directions) |p| {
-            const next = maze.Point{ .r = cur.point.r + p.r, .c = cur.point.c + p.c };
+            const next = maze.Point{ .r = cur.r + p.r, .c = cur.c + p.c };
             if (m.isPath(next.r, next.c) and !parents.contains(next)) {
-                try put(allocator, &parents, next, cur.point);
-                try bfs.queue(next, allocator);
+                try put(allocator, &parents, next, cur);
+                try queue(&bfs, allocator, next);
             }
         }
     }
     return m;
 }
 
-/// Element on which the doubly linked list can intrude.
-const QueueElem = struct {
-    e: std.DoublyLinkedList.Node = .{},
-    point: maze.Point,
-};
+fn queue(
+    bfs: *q.FlatQueue(maze.Point, null),
+    gpa: std.mem.Allocator,
+    v: maze.Point,
+) maze.MazeError!void {
+    _ = bfs.append(gpa, v) catch return maze.MazeError.AllocFail;
+}
 
-/// This should be flat DEQ, but I guess Zig has removed most of these from their std offerings.
-/// I should make my own because a linked list is a worse version but I don't feel like implementing
-/// a DEQ right now and it's a good exercise to see how Zig does intrusive stuff.
-const Queue = struct {
-    list: std.DoublyLinkedList,
-    len: usize,
-
-    /// Initialize an empty queue.
-    fn init() Queue {
-        return Queue{
-            .list = std.DoublyLinkedList{},
-            .len = 0,
-        };
+fn dequeue(
+    bfs: *q.FlatQueue(maze.Point, null),
+) maze.MazeError!maze.Point {
+    if (bfs.popFirst()) |f| {
+        return f;
     }
-
-    /// Free all elements in the queue and set the queue to be undefined.
-    fn deinit(self: *Queue, allocator: std.mem.Allocator) void {
-        while (self.len != 0) : (self.len -= 1) {
-            const handle = self.list.popFirst() orelse return;
-            const elem: *QueueElem = @fieldParentPtr("e", handle);
-            allocator.destroy(elem);
-        }
-        self.* = undefined;
-    }
-
-    /// Queues an element at the back of the queue or fails with an allocation error.
-    fn queue(self: *Queue, p: maze.Point, allocator: std.mem.Allocator) maze.MazeError!void {
-        var node: *QueueElem = allocator.create(QueueElem) catch return maze.MazeError.AllocFail;
-        node.point = p;
-        self.list.append(&node.e);
-        self.len += 1;
-    }
-
-    /// Returns true if the number of elements stores in the queue is 0.
-    fn isEmpty(self: *const Queue) bool {
-        return self.len == 0;
-    }
-
-    /// Pops from the front of the queue or returns a logic error if the queue is empty.
-    fn dequeue(self: *Queue) maze.MazeError!*QueueElem {
-        const handle: ?*std.DoublyLinkedList.Node = self.list.popFirst();
-        if (handle) |h| {
-            self.len -= 1;
-            return @fieldParentPtr("e", h);
-        }
-        return maze.MazeError.LogicFail;
-    }
-};
+    return maze.MazeError.LogicFail;
+}
 
 /// Puts the requested key and value in the hash map or returns an allocation failure.
 fn put(
