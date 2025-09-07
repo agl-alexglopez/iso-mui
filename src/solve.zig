@@ -4,9 +4,16 @@
 const std = @import("std");
 const maze = @import("maze.zig");
 
+/// The bit marking where one or more threads may be dispatched from to solve.
 pub const start_bit: maze.SquareU32 = 0x40000000;
+
+/// The bit marking the goal or finish square.
 pub const finish_bit: maze.SquareU32 = 0x80000000;
+
+/// A value to give to a monitor or manager of threads to indicate none have solved the maze.
 pub const no_winner: maze.SquareU32 = std.math.maxInt(u32);
+
+/// The thread limit for solvers.
 pub const thread_count: usize = 4;
 
 /// Here are all four tetradic colors if more solvers are added in a multithreading scheme:
@@ -16,6 +23,7 @@ pub const thread_paints = [thread_count]maze.SquareU32{
     0x009_531,
     0x010_A88,
 };
+
 /// Every thread can cache a square as seen individually.
 pub const thread_cache_bits = [thread_count]maze.SquareU32{
     0x1_000_000,
@@ -23,15 +31,20 @@ pub const thread_cache_bits = [thread_count]maze.SquareU32{
     0x4_000_000,
     0x8_000_000,
 };
+
 /// Mask for obtaining the paint of a square.
 pub const paint_mask: maze.SquareU32 = 0xFFFFFF;
-pub const red_mask: maze.SquareU32 = 0xFF0000;
-pub const red_shift: maze.SquareU32 = 16;
-pub const green_mask: maze.SquareU32 = 0xFF00;
-pub const green_shift: maze.SquareU32 = 8;
-pub const blue_mask: maze.SquareU32 = 0xFF;
 
-pub const all_directions = [8]maze.Point{
+// Masking to help obtain RGB color values
+
+const red_mask: maze.SquareU32 = 0xFF0000;
+const red_shift: maze.SquareU32 = 16;
+const green_mask: maze.SquareU32 = 0xFF00;
+const green_shift: maze.SquareU32 = 8;
+const blue_mask: maze.SquareU32 = 0xFF;
+
+/// A circular pattern of offsets from a point that include diagonal directions.
+const all_directions = [8]maze.Point{
     .{ .r = 1, .c = 0 },
     .{ .r = 1, .c = 1 },
     .{ .r = 0, .c = 1 },
@@ -48,7 +61,7 @@ pub const all_directions = [8]maze.Point{
 pub fn setStartAndFinish(allocator: std.mem.Allocator, m: *maze.Maze) maze.MazeError!maze.Point {
     var randgen = std.Random.DefaultPrng.init(@bitCast(std.time.milliTimestamp()));
     const rand = randgen.random();
-    const start: maze.Point = try randPoint(m, rand);
+    const start: maze.Point = try randStartOrFinish(m, rand);
     const start_square = m.get(start.r, start.c).load();
     try m.solve_history.record(allocator, maze.Delta{
         .p = start,
@@ -57,7 +70,7 @@ pub fn setStartAndFinish(allocator: std.mem.Allocator, m: *maze.Maze) maze.MazeE
         .burst = 1,
     });
     m.getPtr(start.r, start.c).bitOrEq(start_bit);
-    const finish: maze.Point = try randPoint(m, rand);
+    const finish: maze.Point = try randStartOrFinish(m, rand);
     const finish_square = m.get(finish.r, finish.c).load();
     try m.solve_history.record(allocator, maze.Delta{
         .p = finish,
@@ -69,7 +82,10 @@ pub fn setStartAndFinish(allocator: std.mem.Allocator, m: *maze.Maze) maze.MazeE
     return start;
 }
 
-pub fn randPoint(m: *const maze.Maze, rand: std.Random) maze.MazeError!maze.Point {
+/// A randomly chosen point in the maze. We first start by trying to find a random valid point
+/// or one close to a random point for a start or finish. If that fails we simply scan the entire
+/// maze for an available square. If nothing works we return a logic error.
+pub fn randStartOrFinish(m: *const maze.Maze, rand: std.Random) maze.MazeError!maze.Point {
     const pick = maze.Point{
         .r = rand.intRangeAtMost(isize, 1, m.maze.rows - 2),
         .c = rand.intRangeAtMost(isize, 1, m.maze.cols - 2),
@@ -101,6 +117,7 @@ pub fn randPoint(m: *const maze.Maze, rand: std.Random) maze.MazeError!maze.Poin
     return maze.MazeError.LogicFail;
 }
 
+/// A valid start or finish is an in bounds path square that is not already start or finish.
 fn isValidStartOrFinish(m: *const maze.Maze, check: maze.Point) bool {
     return check.r > 0 and
         check.r < m.maze.rows - 1 and
@@ -110,14 +127,17 @@ fn isValidStartOrFinish(m: *const maze.Maze, check: maze.Point) bool {
         !isStartOrFinish(m.get(check.r, check.c).load());
 }
 
+/// Returns true if the square is either start or finish.
 pub fn isStartOrFinish(square: maze.SquareU32) bool {
     return (square & (start_bit | finish_bit)) != 0;
 }
 
+/// Returns true if the square is only a finish square.
 pub fn isFinish(square: maze.SquareU32) bool {
     return (square & finish_bit) != 0;
 }
 
+/// Returns true if the square has been painted by any thread.
 pub fn hasPaint(square: maze.SquareU32) bool {
     return (square & paint_mask) != 0;
 }
