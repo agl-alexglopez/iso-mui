@@ -79,7 +79,6 @@ pub fn main() !void {
         }
     }
 
-    // Rendering code when maze is complete.
     var loop = try render.Render.init(
         allocator,
         maze_args.rows,
