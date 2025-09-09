@@ -52,15 +52,15 @@ pub fn main() !void {
             .backing_allocator_zeroes = true,
             .safety = true,
             .thread_safe = true,
-        }){},
+        }).init,
         .ReleaseSafe, .ReleaseSmall => heap.GeneralPurposeAllocator(.{
             .thread_safe = true,
             .safety = true,
-        }){},
+        }).init,
         .ReleaseFast => heap.GeneralPurposeAllocator(.{
             .thread_safe = true,
             .backing_allocator_zeroes = false,
-        }){},
+        }).init,
     };
     var maze_args = Args{};
     const allocator = allocator_impl.allocator();
