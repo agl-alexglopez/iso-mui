@@ -273,13 +273,7 @@ pub const Render = struct {
             return false;
         }
         var i: usize = t.i - 1;
-        const end = blk: {
-            if (t.deltas.items[i].burst > t.i) {
-                break :blk 0;
-            } else {
-                break :blk t.i - t.deltas.items[i].burst;
-            }
-        };
+        const end = if (t.deltas.items[i].burst > t.i) 0 else t.i - t.deltas.items[i].burst;
         while (true) {
             const d: maze.Delta = t.deltas.items[i];
             m.getPtr(d.p.r, d.p.c).store(d.before);
